@@ -1,6 +1,6 @@
 {
   "name": "@muse-nexus/proof-gallery",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": false,
   "description": "A local-first, source-faithful evidence gallery for the moments when your own history is hard to reach.",
   "license": "MIT",
