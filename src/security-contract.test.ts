@@ -66,6 +66,8 @@ describe("public share contract", () => {
     expect(indexHtml).toContain(
       "https://proof-gallery-9jn.pages.dev/og.png",
     );
+    expect(indexHtml).toContain("No account, no app analytics");
+    expect(indexHtml).not.toMatch(/no telemetry/i);
     expect(indexHtml).toContain('rel="icon" type="image/svg+xml" href="/favicon.svg"');
   });
 

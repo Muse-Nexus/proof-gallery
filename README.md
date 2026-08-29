@@ -26,8 +26,8 @@ source. Later, search only that collection.
   provider, or paid API key.
 - Optional semantic embeddings for Supabase mode through one OpenAI-compatible
   endpoint.
-- No telemetry, advertising, social feed, automatic collection, or ChorOS
-  subscription.
+- No app analytics or session replay, advertising, social feed, automatic
+  collection, or ChorOS subscription.
 
 ## What it is not
 
