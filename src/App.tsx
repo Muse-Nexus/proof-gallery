@@ -465,9 +465,12 @@ function Gallery({
     setError(null);
     try {
       const result = await importLocalProofBackup(backup);
+      const persistence = await requestLocalProofPersistence();
       setSearchResults(null);
       setNotice(
-        `${result.imported} Proof ${result.imported === 1 ? "item" : "items"} restored locally.`,
+        persistence
+          ? `${result.imported} Proof ${result.imported === 1 ? "item" : "items"} restored locally. Keep the backup somewhere private for recovery.`
+          : `${result.imported} Proof ${result.imported === 1 ? "item" : "items"} restored locally, but browser persistence is not guaranteed. Keep the backup somewhere private.`,
       );
       await reload();
     } catch (restoreError) {
@@ -549,9 +552,10 @@ function Gallery({
               <input
                 ref={importInput}
                 className="visually-hidden"
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => void restoreLocalData(event)}
+              type="file"
+              accept="application/json,.json"
+              aria-label="Restore Proof Gallery backup"
+              onChange={(event) => void restoreLocalData(event)}
                 tabIndex={-1}
               />
               <button

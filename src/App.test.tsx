@@ -7,8 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  importLocalProofBackup,
   listLocalProofItems,
   releaseLocalProofImageUrls,
+  requestLocalProofPersistence,
   subscribeToLocalProofChanges,
 } from "./lib/local-proof-store";
 import type { ProofItem } from "./lib/proof";
@@ -125,6 +127,40 @@ describe("standalone local storage boundary", () => {
     expect(screen.getByRole("dialog")).not.toHaveTextContent(
       "Private · only you",
     );
+  });
+
+  it("requests durable browser storage after restoring a local backup", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(importLocalProofBackup).mockResolvedValue({
+      imported: 2,
+      importedCount: 2,
+      items: [],
+    });
+    vi.mocked(requestLocalProofPersistence).mockResolvedValue(true);
+    render(<App />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start in this browser" }),
+    );
+    await screen.findByRole("button", { name: "Restore" });
+
+    fireEvent.change(screen.getByLabelText("Restore Proof Gallery backup"), {
+      target: {
+        files: [
+          new File(["synthetic backup"], "proof-backup.json", {
+            type: "application/json",
+          }),
+        ],
+      },
+    });
+
+    await waitFor(() =>
+      expect(requestLocalProofPersistence).toHaveBeenCalledOnce(),
+    );
+    expect(
+      screen.getByText(
+        "2 Proof items restored locally. Keep the backup somewhere private for recovery.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("lets a returning local user revisit the shareable landing page", async () => {

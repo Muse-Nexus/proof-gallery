@@ -512,6 +512,26 @@ describe("versioned local backup boundary", () => {
     ).rejects.toThrow("non-private");
   });
 
+  it("rejects backup timestamps too close to the JavaScript date limit", async () => {
+    await createLocalProofItem(input(), null);
+    const valid = await backupDocument();
+    const item = (valid.items as Array<Record<string, unknown>>)[0];
+
+    await expect(
+      importLocalProofBackup(
+        backupBlob({
+          ...valid,
+          items: [
+            {
+              ...item,
+              updatedAt: "+275760-09-13T00:00:00.000Z",
+            },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("Updated timestamp must not be later than year 9999");
+  });
+
   it("detects evidence or provenance corruption with the canonical item receipt", async () => {
     await createLocalProofItem(input(), null);
     const document = await backupDocument();

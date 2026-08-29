@@ -23,6 +23,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_IMAGE_BYTES = 48 * 1024 * 1024;
 const MAX_BACKUP_ITEMS = 10_000;
+const MAX_EDITABLE_TIMESTAMP_MS = Date.parse("9999-12-31T23:59:59.999Z");
 const CHANGE_CHANNEL_NAME = "muse-nexus-proof-gallery-local-changes-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -329,6 +330,9 @@ function isoTimestamp(value: unknown, label: string): string {
   const parsed = Date.parse(timestamp);
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== timestamp) {
     throw new Error(`${label} must be an ISO timestamp`);
+  }
+  if (parsed > MAX_EDITABLE_TIMESTAMP_MS) {
+    throw new Error(`${label} must not be later than year 9999`);
   }
   return timestamp;
 }
