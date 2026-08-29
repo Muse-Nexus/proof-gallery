@@ -73,6 +73,44 @@ afterEach(() => {
 });
 
 describe("Proof image selection", () => {
+  it("can show the local storage boundary without an owner-only claim", () => {
+    render(
+      <ProofEditor
+        item={null}
+        busy={false}
+        privacyLabel="Local · not synced · not encrypted"
+        onClose={() => undefined}
+        onSave={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Local · not synced · not encrypted",
+    );
+    expect(screen.getByRole("dialog")).not.toHaveTextContent(
+      "Private · only you",
+    );
+  });
+
+  it("saves a date received through the native input event", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    fireEvent.change(screen.getByLabelText(/^Title$/), {
+      target: { value: "Synthetic dated Proof" },
+    });
+    fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), {
+      target: { value: "Synthetic evidence text" },
+    });
+    fireEvent.input(screen.getByLabelText("Occurred date"), {
+      target: { value: "2026-08-29" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0]?.[0].input.occurredOn).toBe("2026-08-29");
+  });
+
   it("validates a raster image without assigning a local file URL to the DOM", async () => {
     const createObjectUrl = vi.fn();
     Object.defineProperty(URL, "createObjectURL", {

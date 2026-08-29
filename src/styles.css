@@ -113,8 +113,39 @@ code {
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.65rem;
   flex-shrink: 0;
+}
+
+.local-boundary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.45rem 0.8rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #d8cde1;
+  border-radius: 0.8rem;
+  color: var(--muted);
+  background: rgb(255 253 249 / 72%);
+  font-size: 0.83rem;
+  line-height: 1.5;
+}
+
+.local-boundary strong {
+  color: var(--accent-dark);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 .primary-button,
@@ -577,6 +608,27 @@ textarea {
   margin: 0.75rem auto 0;
 }
 
+.local-start-warning {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1.35rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #d8cde1;
+  border-radius: 0.8rem;
+  color: var(--muted);
+  background: var(--paper-soft);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.local-start-warning strong {
+  color: var(--accent-dark);
+}
+
+.auth-card > .local-start-warning + .primary-button {
+  width: 100%;
+}
+
 .small-print {
   margin: 1.2rem 0 0;
   text-align: center;
@@ -608,10 +660,15 @@ textarea {
 
   .header-actions {
     width: 100%;
+    justify-content: flex-start;
   }
 
   .header-actions .primary-button {
     flex: 1;
+  }
+
+  .local-boundary {
+    grid-template-columns: 1fr;
   }
 
   .search-form,

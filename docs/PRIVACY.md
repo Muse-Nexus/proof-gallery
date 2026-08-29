@@ -2,9 +2,20 @@
 
 ## Boundary
 
-Proof Gallery stores private autobiographical evidence in the operator's own
-Supabase project. The public GitHub repository contains software, not anyone's
-evidence. There is no Muse Nexus hosted evidence service in this repository.
+The public GitHub repository contains software, not anyone's evidence. There is
+no Muse Nexus hosted evidence service in this repository.
+
+Proof Gallery has two deliberately separate storage modes:
+
+- **Local mode** stores evidence and image bytes in IndexedDB for one browser
+  origin and profile. It requires no account.
+- **Supabase mode** stores evidence in an operator-controlled Supabase project
+  behind an authenticated owner identity and row-level security.
+
+Choosing a mode is explicit. A failed login, missing configuration, network
+error, or unavailable provider does not silently move evidence into local
+storage. Proof Gallery does not automatically sync, migrate, co-search, or
+merge the two collections.
 
 ## Protected assets
 
@@ -14,7 +25,42 @@ evidence. There is no Muse Nexus hosted evidence service in this repository.
 - authentication sessions;
 - optional embeddings, which may encode sensitive text.
 
-## Enforced controls
+## Local mode
+
+Local mode makes no evidence or search request to Supabase or an embedding
+provider. Retrieval is deterministic lexical ranking over Proof items in the
+selected IndexedDB database; it is not semantic search and does not invoke a
+model. Drive and Dropbox are not connected or queried.
+
+"Local" describes storage location, not an authenticated owner boundary:
+
+- Proof Gallery does not encrypt local items, images, or backups.
+- Anyone who can use the same browser profile may be able to open the gallery.
+- Privileged browser extensions, device administrators, malware, browser
+  debugging tools, and JavaScript that executes on the same origin may be able
+  to read or change the data.
+- Clearing site data, storage eviction, private-browsing teardown, browser
+  reset, or profile/device loss may permanently remove the IndexedDB database.
+  A persistence request is best-effort and does not make browser storage a
+  backup.
+- Browser storage is isolated by origin, not by URL path. GitHub Pages project
+  paths under one `*.github.io` site share an origin. Use a dedicated exact
+  hostname that serves no unrelated or third-party JavaScript when storage
+  isolation matters.
+
+The app can create a user-initiated, versioned JSON backup and restore a
+supported backup after validation. The archive is portable **plaintext**. The
+user may keep it in a private local folder or manually place it in a private
+Google Drive or Dropbox folder, but Proof Gallery does not upload, watch, or
+sync that folder. Item and image SHA-256 receipts detect corruption; they do
+not authenticate or encrypt a backup. Protect access to every exported copy.
+
+Removing local Proof data clears records controlled by this origin. It cannot
+remove downloaded backups, original source files, copies made by other
+software, or browser/device backups, and it cannot guarantee secure erasure
+from storage media.
+
+## Supabase-mode enforced controls
 
 - Authenticated owner identity is required at the table, Storage, RPC, and Edge
   Function boundaries.
@@ -38,18 +84,20 @@ evidence. There is no Muse Nexus hosted evidence service in this repository.
 
 ## Provider boundary
 
-Lexical search stays inside Postgres. If an operator configures an embedding
+Local lexical search stays in the browser and calls no provider. Supabase-mode
+lexical search stays inside Postgres. If an operator configures an embedding
 endpoint, saved Proof text is sent when an item is indexed and submitted search
 text is sent when semantic search runs. No image is sent to an embedding or
 vision provider. The UI displays when semantic search is unavailable and uses
-the private lexical path instead.
+the private Supabase lexical path instead.
 
 ## Known limitations
 
-- Uploaded images preserve their original bytes, including any EXIF metadata
-  such as GPS coordinates or device details. This keeps evidence source-faithful
-  but means operators should strip metadata before upload when it is not needed.
-  The app does not silently alter the original image.
+- Local and uploaded images preserve their original bytes, including any EXIF
+  metadata such as GPS coordinates or device details. Exported local backups
+  preserve those bytes too. This keeps evidence source-faithful but means users
+  should strip metadata before saving when it is not needed. The app does not
+  silently alter the original image.
 - Browser file-signature checks can be bypassed by a custom authenticated API
   client. The private bucket still enforces owner folders, an image MIME
   allowlist, and size limits. Operators who accept untrusted users should add a
@@ -59,9 +107,18 @@ the private lexical path instead.
   claiming full cleanup; operators can reconcile with the recovery steps in
   [SELF_HOSTING.md](SELF_HOSTING.md).
 - Anyone controlling the Supabase project, database host, frontend origin, or
-  embedding provider can access data at that layer. Choose operators and
-  providers accordingly.
+  configured embedding provider can access data at that layer. In local mode,
+  the browser profile, device, extensions, and frontend origin are the primary
+  trust boundary. Choose operators and software accordingly.
 - This MVP does not provide application-layer encryption with a user-held key.
+
+## Collection boundary
+
+All collection is user-initiated. Proof Gallery does not search or mine Drive,
+Dropbox, email, photos, messages, finance, ordinary memories, or other accounts.
+It does not run background collection or automatically surface evidence during
+distress. Automatic connector collection would require a later, explicit review
+inbox design before anything entered the gallery.
 
 ## Public issue hygiene
 

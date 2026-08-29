@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { getSupabase } from "../lib/supabase";
 
-export function AuthPanel() {
+export function AuthPanel({ onUseLocal }: { onUseLocal?: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -72,8 +72,15 @@ export function AuthPanel() {
         >
           {mode === "signin" ? "Create a private account" : "I already have an account"}
         </button>
+        {onUseLocal && (
+          <button type="button" className="text-button" onClick={onUseLocal}>
+            Use this browser without an account
+          </button>
+        )}
         <p className="small-print">
           This app has no public gallery, social feed, or automatic collection.
+          Local browser storage is not encrypted and is separate from a hosted
+          account.
         </p>
       </section>
     </main>

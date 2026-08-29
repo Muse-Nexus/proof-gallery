@@ -12,13 +12,16 @@ source. Later, search only that collection.
 
 ## What it is
 
-- Private manual evidence with owner-only accounts and row-level security.
-- Images or screenshots in a dedicated private Storage bucket.
+- An explicit, no-account local mode backed by this browser profile's IndexedDB.
+- An optional hosted Supabase mode with owner accounts and row-level security.
+- Images or screenshots stored beside the item in the selected mode.
 - Exact evidence, occurred date, source type/detail, category, tags, person, and
   project.
 - Category/tag filters, newest ordering, and relevance ordering during search.
-- Proof-only lexical search that works without a model or paid API key.
-- Optional semantic embeddings through one OpenAI-compatible endpoint.
+- Deterministic Proof-only lexical search that works locally without a model,
+  provider, or paid API key.
+- Optional semantic embeddings for Supabase mode through one OpenAI-compatible
+  endpoint.
 - No telemetry, advertising, social feed, automatic collection, or ChorOS
   subscription.
 
@@ -29,41 +32,53 @@ argument that suffering is not real. It does not mine email, photos, messages,
 finances, memories, or accounts. It does not automatically surface evidence
 during distress.
 
-The repository is public. **Every user's evidence remains private in the
-Supabase instance they control.** This repository contains synthetic test text
+The repository is public. Evidence is not: local-mode evidence remains in the
+chosen browser profile, and hosted-mode evidence remains in the Supabase
+instance the operator controls. This repository contains synthetic test text
 only — no personal entries, production data, screenshots, or credentials.
 
 ## Quick start
 
-Requirements: [Bun](https://bun.sh), [Supabase CLI](https://supabase.com/docs/guides/local-development), and Docker for the local Supabase stack. Use a dedicated new Supabase project; the fail-closed migration rejects pre-existing Storage object policies that could broaden access.
+The fastest route needs only [Bun](https://bun.sh):
 
 ```bash
 git clone https://github.com/Muse-Nexus/proof-gallery.git
 cd proof-gallery
 bun install
-supabase start
-cp .env.example .env.local
-```
-
-Copy the local `API URL` and `anon key` printed by `supabase start` into
-`.env.local`, then run:
-
-```bash
-supabase functions serve --env-file .env.local
 bun run dev
 ```
 
-Open `http://localhost:5173`, create the owner account, and add one synthetic or
-real item manually. For a hosted single-owner install, create the owner first
-and then disable new signups in Supabase Auth.
+Open `http://localhost:5173`, choose **Use this browser**, and add an item. That
+choice is explicit: an unavailable or misconfigured Supabase connection never
+silently falls back to local storage.
 
-See [Self-hosting](docs/SELF_HOSTING.md) for deployment, origins, optional local
-embeddings, backups, and account deletion.
+Local mode needs no account and makes no evidence or search request to
+Supabase, an embedding service, Drive, or Dropbox. Items and image bytes stay in
+IndexedDB for that browser profile. Local mode is not account-authenticated,
+not encrypted by Proof Gallery, and not automatically synchronized. Back up
+regularly with the user-initiated versioned JSON export; the resulting plaintext
+file can be kept in a private local folder or placed in a private Google Drive
+or Dropbox folder by the user. Integrity receipts detect backup corruption but
+do not authenticate or encrypt the file.
+
+For authenticated, multi-device storage, use the optional Supabase mode. It
+requires the [Supabase CLI](https://supabase.com/docs/guides/local-development)
+and Docker for local development, or a dedicated hosted Supabase project. The
+fail-closed migration rejects pre-existing Storage object policies that could
+broaden access.
+
+See [Self-hosting](docs/SELF_HOSTING.md) for both modes, deployment origins,
+optional embeddings, backups, and account deletion.
 
 ## Search modes
 
-Lexical retrieval is the free default. Postgres full-text and trigram ranking
-operate only on `proof_items`, with owner RLS applied before ranking.
+Local mode uses deterministic lexical ranking over Proof items in the selected
+browser profile. It does not call a model or provider. Local and Supabase
+collections are separate: Proof Gallery does not silently sync, migrate,
+co-search, or merge them.
+
+In Supabase mode, Postgres full-text and trigram ranking operate only on
+`proof_items`, with owner RLS applied before ranking.
 
 Semantic retrieval is optional. Configure one OpenAI-compatible embedding
 endpoint in Edge Function secrets:
@@ -86,6 +101,17 @@ an external embedding endpoint. Images are never sent for vision analysis.
 
 ## Privacy architecture
 
+- Local mode stores items and image bytes in IndexedDB for the current origin
+  and browser profile. It has no owner authentication and is not encrypted by
+  Proof Gallery; other users of that profile, privileged extensions, device
+  administrators, and JavaScript executing on the same origin may be able to
+  read it.
+- Clearing site data, browser eviction, private-browsing teardown, or profile
+  loss can erase local data. Export files are portable plaintext and must be
+  protected by the user.
+- A dedicated hostname is required for meaningful browser-storage isolation.
+  GitHub Pages project paths share their parent origin and therefore share its
+  browser-storage trust boundary.
 - `proof_items.visibility` is fixed to `personal`.
 - Postgres uses `ENABLE ROW LEVEL SECURITY` plus `FORCE ROW LEVEL SECURITY`.
 - Separate owner-only policies cover SELECT, INSERT, UPDATE, and DELETE.
@@ -130,10 +156,12 @@ shell exit. All tests and examples must stay explicitly synthetic.
 
 ## Scope
 
-The standalone MVP stops at private manual CRUD, images, filtering, and scoped
-retrieval. Connectors, autonomous mining, review inboxes, public sharing,
-digests, model orchestration, mood diagnosis, and generalized life logging are
-deliberately out of scope.
+The standalone MVP stops at manual CRUD, images, filtering, scoped retrieval,
+and explicit local backup/restore. Drive and Dropbox connectors, background
+sync, autonomous mining, review inboxes, public sharing, digests, model
+orchestration, mood diagnosis, and generalized life logging are deliberately
+out of scope. Manually placing an exported backup in a private Drive or Dropbox
+folder does not make either service a Proof Gallery connector.
 
 ## Contributing and security
 
