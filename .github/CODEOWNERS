@@ -1,0 +1,7 @@
+# Privacy-critical paths require owner review.
+/supabase/ @Liquidg10
+/src/lib/proof-api.ts @Liquidg10
+/src/lib/supabase.ts @Liquidg10
+/src/components/ProofEditor.tsx @Liquidg10
+/docs/PRIVACY.md @Liquidg10
+/SECURITY.md @Liquidg10

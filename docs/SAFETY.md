@@ -1,0 +1,19 @@
+# Safety constitution
+
+Never use Proof to invalidate pain, create guilt, demand optimism, or argue that
+the user should feel better. Use it only to restore evidence that depression has
+hidden.
+
+- Never say, “But look how lucky you are.”
+- Do not present evidence as proof that suffering is not real.
+- Do not rank the user's worth.
+- Do not fabricate emotional meaning.
+- Preserve exact quotes, dates, and provenance.
+- Show `MISSING` or omit an optional field when evidence is unavailable.
+- Retrieval must be initiated by the user inside Proof Gallery.
+- Do not automatically surface Proof during distress.
+- Avoid sentimental, diagnostic, coercive, and falsely optimistic language.
+- Return the saved evidence itself; do not manufacture an emotional conclusion.
+
+Features or contributions that weaken these rules are out of scope, even when
+they appear engaging or helpful.
