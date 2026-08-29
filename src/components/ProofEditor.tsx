@@ -139,7 +139,10 @@ export function ProofEditor({
   }
 
   const existingPreview =
-    item?.imageUrl && !removeExistingImage ? item.imageUrl : null;
+    item?.imagePath && item.imageUrl ? item.imageUrl : null;
+  const existingPreviewUnavailable = Boolean(
+    item?.imagePath && !item.imageUrl,
+  );
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
@@ -166,6 +169,68 @@ export function ProofEditor({
             Title
             <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
           </label>
+          <label className="full-width evidence-image-field">
+            Evidence image or screenshot <span className="optional">optional · JPEG, PNG, WebP, or GIF · 10 MB max</span>
+            <span className="field-guidance">
+              Attach only an image that is part of this evidence. Decorative
+              landing visuals are never attached automatically.
+            </span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={selectImage}
+            />
+          </label>
+          {image && (
+            <p className="selection-status full-width" role="status">
+              Image validated and ready to save: <strong>{image.name}</strong>
+            </p>
+          )}
+          {existingPreview && !image && (
+            <div
+              className={`image-preview full-width${
+                removeExistingImage ? " image-preview--removing" : ""
+              }`}
+            >
+              <div className="image-preview-label">Current evidence attachment</div>
+              <img
+                src={existingPreview}
+                alt={`Current evidence image for ${item?.title ?? "this Proof"}`}
+                referrerPolicy="no-referrer"
+              />
+              {item?.imagePath && (
+                <label className="checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={removeExistingImage}
+                    onChange={(event) => setRemoveExistingImage(event.target.checked)}
+                  />
+                  Remove this evidence image
+                </label>
+              )}
+            </div>
+          )}
+          {existingPreviewUnavailable && !image && (
+            <div className="image-preview-unavailable full-width" role="status">
+              <strong>
+                {removeExistingImage
+                  ? "Evidence attachment marked for removal"
+                  : "Evidence attachment saved · preview unavailable"}
+              </strong>
+              <span>
+                The saved image could not be previewed right now. This does not
+                mean the attachment is missing.
+              </span>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={removeExistingImage}
+                  onChange={(event) => setRemoveExistingImage(event.target.checked)}
+                />
+                Remove this evidence image
+              </label>
+            </div>
+          )}
           <label className="full-width">
             Exact quote or evidence
             <textarea
@@ -220,38 +285,6 @@ export function ProofEditor({
             Project <span className="optional">optional</span>
             <input value={project} onChange={(event) => setProject(event.target.value)} maxLength={200} />
           </label>
-          <label className="full-width">
-            Image or screenshot <span className="optional">optional · JPEG, PNG, WebP, or GIF · 10 MB max</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={selectImage}
-            />
-          </label>
-          {image && (
-            <p className="selection-status full-width" role="status">
-              Image validated and ready to save: <strong>{image.name}</strong>
-            </p>
-          )}
-          {existingPreview && !image && (
-            <div className="image-preview full-width">
-              <img
-                src={existingPreview}
-                alt="Current Proof attachment"
-                referrerPolicy="no-referrer"
-              />
-              {item?.imagePath && (
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={removeExistingImage}
-                    onChange={(event) => setRemoveExistingImage(event.target.checked)}
-                  />
-                  Remove this image
-                </label>
-              )}
-            </div>
-          )}
           {error && <p className="error-banner full-width">{error}</p>}
           <footer className="editor-actions full-width">
             <button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button>

@@ -120,6 +120,24 @@ It does not run background collection or automatically surface evidence during
 distress. Automatic connector collection would require a later, explicit review
 inbox design before anything entered the gallery.
 
+## Decorative visual boundary
+
+Stock and AI-generated visuals are bundled first-party landing-page assets,
+not runtime provider content. Page load makes no Unsplash/image-model asset or
+API request and sends no evidence or search text to either provider. The
+credited Unsplash links navigate there only after a user chooses them. The app
+does not widen its Content Security Policy for provider asset or API domains.
+Decorative assets are visibly labeled **Not saved Proof** and are excluded from
+item data, local backups, database rows, attachment storage, provenance,
+embeddings, and search.
+
+Gallery cards never substitute decorative imagery for missing evidence. An
+image renders only when a Proof item has a stored attachment path and its
+resolved private or local URL. A saved attachment without a current preview is
+labeled **Preview unavailable**, not missing; only a missing attachment path is
+explicitly text-only. Asset origins and hashes are documented in
+[VISUAL_ASSETS.md](VISUAL_ASSETS.md).
+
 ## Public issue hygiene
 
 Never paste evidence, photos, account identifiers, signed URLs, secrets, or

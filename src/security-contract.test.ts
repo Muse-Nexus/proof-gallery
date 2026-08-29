@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +13,17 @@ const search = readFileSync(
 );
 const indexHtml = readFileSync(resolve("index.html"), "utf8");
 const publicHeaders = readFileSync(resolve("public/_headers"), "utf8");
+const app = readFileSync(resolve("src/App.tsx"), "utf8");
+const decorativeVisual = readFileSync(
+  resolve("src/components/DecorativeVisual.tsx"),
+  "utf8",
+);
+const notice = readFileSync(resolve("NOTICE.md"), "utf8");
+const visualAssets = readFileSync(resolve("docs/VISUAL_ASSETS.md"), "utf8");
+
+function sha256(path: string): string {
+  return createHash("sha256").update(readFileSync(resolve(path))).digest("hex");
+}
 
 describe("database privacy contract", () => {
   it("forces owner RLS for every CRUD action", () => {
@@ -76,5 +88,33 @@ describe("public share contract", () => {
     expect(publicHeaders).toContain("font-src 'self'");
     expect(publicHeaders).toContain("frame-ancestors 'none'");
     expect(publicHeaders).not.toMatch(/google-analytics|googletagmanager|segment\.com/i);
+  });
+
+  it("bundles decorative images first-party without widening the provider boundary", () => {
+    expect(app).toContain('src="/visuals/evidence-desk-ai.webp"');
+    expect(app).toContain('src="/visuals/paper-collage-unsplash.webp"');
+    expect(`${app}\n${decorativeVisual}`).not.toMatch(
+      /https:\/\/(?:images|source)\.unsplash\.com/i,
+    );
+    expect(publicHeaders).not.toMatch(/unsplash|openai/i);
+    for (const asset of [
+      "evidence-desk-ai.webp",
+      "paper-collage-unsplash.webp",
+    ]) {
+      expect(notice).toContain(asset);
+      expect(visualAssets).toContain(asset);
+    }
+    expect(visualAssets).toContain(
+      "f0ac276d835f105df9c94297a1a1cb10323c1c111f0f4c043db8aa7d4bdaef8d",
+    );
+    expect(sha256("public/visuals/evidence-desk-ai.webp")).toBe(
+      "f0ac276d835f105df9c94297a1a1cb10323c1c111f0f4c043db8aa7d4bdaef8d",
+    );
+    expect(visualAssets).toContain(
+      "c68239ac19ff1ec2ca1fa149f36bc0e694c13048e1d1f8b3d8ebed75f0ebab2e",
+    );
+    expect(sha256("public/visuals/paper-collage-unsplash.webp")).toBe(
+      "c68239ac19ff1ec2ca1fa149f36bc0e694c13048e1d1f8b3d8ebed75f0ebab2e",
+    );
   });
 });
