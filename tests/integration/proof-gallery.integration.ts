@@ -166,6 +166,12 @@ try {
   });
   assert.ok(invalidNestedTags.error, "nested tag arrays must be rejected");
 
+  const invalidSourceType = await ownerA.client.from("proof_items").insert({
+    ...fixtureProof(ownerA.user.id),
+    provenance: { kind: "synthetic_fixture", source_type: "unknown-source" },
+  });
+  assert.ok(invalidSourceType.error, "unknown source types must be rejected");
+
   const categoryFilter = await ownerA.client
     .from("proof_items")
     .select("id,category,tags")
@@ -227,6 +233,58 @@ try {
     .select("id")
     .single();
   assert.ifError(validVector.error);
+
+  const changedSourceType = await ownerA.client
+    .from("proof_items")
+    .update({
+      provenance: {
+        kind: "synthetic_fixture",
+        fixture: true,
+        source_type: "photo",
+      },
+    })
+    .eq("id", proofAId)
+    .select("embedding,embedding_model,embedding_dimensions")
+    .single();
+  assert.ifError(changedSourceType.error);
+  assert.equal(changedSourceType.data.embedding, null);
+  assert.equal(changedSourceType.data.embedding_model, null);
+  assert.equal(changedSourceType.data.embedding_dimensions, null);
+
+  const sourceTypeSearch = await ownerA.client.rpc("search_proof_items", {
+    p_query: "photo",
+    p_limit: 6,
+    p_category: "competence",
+    p_tags: ["trusted"],
+  });
+  assert.ifError(sourceTypeSearch.error);
+  assert.ok(
+    (sourceTypeSearch.data as Array<{ id: string }>).some(
+      (row) => row.id === proofAId,
+    ),
+  );
+
+  const restoredSourceType = await ownerA.client
+    .from("proof_items")
+    .update({
+      provenance: {
+        kind: "synthetic_fixture",
+        fixture: true,
+        source_type: "email",
+      },
+    })
+    .eq("id", proofAId);
+  assert.ifError(restoredSourceType.error);
+
+  const restoredVector = await ownerA.client
+    .from("proof_items")
+    .update({
+      embedding: "[1,0,0]",
+      embedding_model: "integration-fixture-v1",
+      embedding_dimensions: 3,
+    })
+    .eq("id", proofAId);
+  assert.ifError(restoredVector.error);
 
   const mixedDimension = await ownerA.client
     .from("proof_items")

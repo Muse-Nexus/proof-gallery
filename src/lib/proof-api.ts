@@ -75,6 +75,9 @@ function payload(input: ProofItemInput) {
   if (!title || !evidenceText) {
     throw new Error("Title and evidence are required");
   }
+  if (!isProofSourceType(input.sourceType)) {
+    throw new Error("Choose a valid Proof source type");
+  }
   if (
     input.tags.some(
       (tag) => tag.trim().replace(/^#+/, "").toLowerCase().length > 80,
