@@ -1,6 +1,10 @@
 # Proof Gallery
 
-**A private, self-hosted gallery for saving and retrieving concrete evidence — source-faithful, user-initiated, and free/open source.**
+**A free, local-first gallery for saving and retrieving concrete evidence — source-faithful, user-initiated, and private to the storage mode you choose.**
+
+![Proof Gallery — Keep the receipts your brain misplaces.](public/og.png)
+
+Try the browser-local edition at [proof-gallery-9jn.pages.dev](https://proof-gallery-9jn.pages.dev/).
 
 Proof Gallery is for moments when depression or a difficult week makes positive
 autobiographical evidence hard to access. Save the actual message, receipt,
@@ -48,7 +52,7 @@ bun install
 bun run dev
 ```
 
-Open `http://localhost:5173`, choose **Use this browser**, and add an item. That
+Open `http://localhost:5173`, choose **Start in this browser**, and add an item. That
 choice is explicit: an unavailable or misconfigured Supabase connection never
 silently falls back to local storage.
 

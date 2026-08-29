@@ -10,6 +10,8 @@ const search = readFileSync(
   resolve("supabase/functions/proof-search/index.ts"),
   "utf8",
 );
+const indexHtml = readFileSync(resolve("index.html"), "utf8");
+const publicHeaders = readFileSync(resolve("public/_headers"), "utf8");
 
 describe("database privacy contract", () => {
   it("forces owner RLS for every CRUD action", () => {
@@ -50,5 +52,27 @@ describe("database privacy contract", () => {
     expect(search.indexOf('client.rpc("search_proof_items"')).toBeLessThan(
       search.indexOf('client.rpc(\n        "claim_proof_embedding_slot"'),
     );
+  });
+});
+
+describe("public share contract", () => {
+  it("describes the browser-local boundary and includes complete social metadata", () => {
+    expect(indexHtml).toContain("free, browser-local gallery");
+    expect(indexHtml).toContain('property="og:title" content="Proof Gallery"');
+    expect(indexHtml).toContain('name="twitter:card" content="summary_large_image"');
+    expect(indexHtml).toContain(
+      'rel="canonical" href="https://proof-gallery-9jn.pages.dev/"',
+    );
+    expect(indexHtml).toContain(
+      "https://proof-gallery-9jn.pages.dev/og.png",
+    );
+    expect(indexHtml).toContain('rel="icon" type="image/svg+xml" href="/favicon.svg"');
+  });
+
+  it("keeps scripts and fonts first-party under a restrictive hosting policy", () => {
+    expect(publicHeaders).toContain("script-src 'self'");
+    expect(publicHeaders).toContain("font-src 'self'");
+    expect(publicHeaders).toContain("frame-ancestors 'none'");
+    expect(publicHeaders).not.toMatch(/google-analytics|googletagmanager|segment\.com/i);
   });
 });

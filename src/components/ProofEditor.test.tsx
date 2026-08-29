@@ -73,6 +73,39 @@ afterEach(() => {
 });
 
 describe("Proof image selection", () => {
+  it("keeps keyboard focus inside the dialog and restores it on close", () => {
+    const trigger = document.createElement("button");
+    trigger.textContent = "Synthetic trigger";
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <ProofEditor
+        item={null}
+        busy={false}
+        onClose={onClose}
+        onSave={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText(/^Title$/)).toHaveFocus();
+
+    const dialog = screen.getByRole("dialog");
+    const close = screen.getByRole("button", { name: "Close editor" });
+    const save = screen.getByRole("button", { name: "Save Proof" });
+    save.focus();
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(save).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+    unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
+  });
+
   it("can show the local storage boundary without an owner-only claim", () => {
     render(
       <ProofEditor

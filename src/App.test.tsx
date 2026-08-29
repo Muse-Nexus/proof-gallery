@@ -72,15 +72,29 @@ describe("standalone local storage boundary", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     render(<App />);
 
-    expect(screen.getByText("No account required")).toBeInTheDocument();
     expect(
-      screen.getByText(/Not synced or encrypted by Proof Gallery/i),
+      screen.getByRole("heading", {
+        name: "Keep the receipts your brain misplaces.",
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Stored in this browser profile · not synced · not encrypted/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View the code" }),
+    ).toHaveAttribute("href", "https://github.com/Muse-Nexus/proof-gallery");
     expect(
       screen.queryByRole("heading", { name: "Restore the evidence you saved" }),
     ).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use this browser" }));
+    const localStart = screen.getByRole("button", {
+      name: "Start in this browser",
+    });
+    expect(localStart).toHaveAccessibleDescription(
+      /Stored in this browser profile\. Not synced or encrypted by Proof Gallery\./i,
+    );
+    fireEvent.click(localStart);
 
     expect(
       await screen.findByRole("heading", {
@@ -98,7 +112,9 @@ describe("standalone local storage boundary", () => {
 
   it("uses the honest local boundary inside the editor", async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "Use this browser" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start in this browser" }),
+    );
     await screen.findByRole("button", { name: "Add Proof" });
 
     fireEvent.click(screen.getByRole("button", { name: "Add Proof" }));
@@ -108,6 +124,23 @@ describe("standalone local storage boundary", () => {
     );
     expect(screen.getByRole("dialog")).not.toHaveTextContent(
       "Private · only you",
+    );
+  });
+
+  it("lets a returning local user revisit the shareable landing page", async () => {
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+
+    await screen.findByRole("button", { name: "Add Proof" });
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Keep the receipts your brain misplaces.",
+      }),
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem("proof-gallery-storage-mode")).toBe(
+      "local",
     );
   });
 

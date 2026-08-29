@@ -55,7 +55,7 @@ function initialStorageMode(): StorageMode | null {
   } catch {
     // Fall through to an explicit local choice or configured hosted mode.
   }
-  return isConfigured ? "hosted" : null;
+  return null;
 }
 
 function downloadBackup(blob: Blob) {
@@ -69,31 +69,185 @@ function downloadBackup(blob: Blob) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-function LocalStart({ onUseLocal }: { onUseLocal: () => void }) {
+function LocalStart({
+  onUseLocal,
+  onUseHosted,
+}: {
+  onUseLocal: () => void;
+  onUseHosted?: () => void;
+}) {
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-labelledby="local-start-heading">
-        <span className="privacy-badge">No account required</span>
-        <h1 id="local-start-heading">Proof Gallery</h1>
-        <p className="lede">
-          Keep your evidence on this device and search it without configuring a
-          server or connecting an account.
-        </p>
-        <div className="local-start-warning">
-          <strong>Local to this browser profile.</strong>
-          <span>
-            Not synced or encrypted by Proof Gallery. Browser data can be
-            cleared or lost, so download private backups regularly.
-          </span>
+    <main className="landing-shell">
+      <nav className="landing-nav" aria-label="Primary navigation">
+        <a className="landing-brand" href="#top" aria-label="Proof Gallery home">
+          <span className="brand-mark" aria-hidden="true">P</span>
+          <span>Proof Gallery</span>
+        </a>
+        <div className="landing-nav-actions">
+          <span className="open-source-pill">Free + open source</span>
+          <a
+            className="text-link"
+            href="https://github.com/Muse-Nexus/proof-gallery"
+            target="_blank"
+            rel="noreferrer"
+          >
+            View the code
+          </a>
         </div>
-        <button className="primary-button" type="button" onClick={onUseLocal}>
-          Use this browser
-        </button>
-        <p className="small-print">
-          Nothing is imported automatically. You choose every item that enters
-          the Gallery.
-        </p>
+      </nav>
+
+      <section className="landing-hero" id="top" aria-labelledby="local-start-heading">
+        <div className="landing-hero-copy">
+          <span className="landing-eyebrow">Concrete evidence, on your terms</span>
+          <h1 id="local-start-heading">
+            Keep the receipts your brain misplaces.
+          </h1>
+          <p className="landing-lede">
+            Save the actual message, finished thing, photo, receipt, award, or
+            memory—then find it again with its date and source intact.
+          </p>
+          <p className="landing-constitution">
+            Proof does not cancel pain. It only restores evidence you chose to
+            save.
+          </p>
+          <div className="landing-cta-row">
+            <button
+              className="primary-button landing-primary"
+              type="button"
+              aria-describedby="local-storage-disclosure"
+              onClick={onUseLocal}
+            >
+              Start in this browser
+            </button>
+            <a className="secondary-link" href="#how-it-works">
+              See how it works
+            </a>
+          </div>
+          <p id="local-storage-disclosure" className="local-start-disclosure">
+            Stored in this browser profile. Not synced or encrypted by Proof
+            Gallery. Clearing site data can erase it; export a private backup.
+          </p>
+          <p className="landing-fine-print">
+            No account. No app analytics or session replay. Nothing collected automatically.
+          </p>
+          {onUseHosted && (
+            <button className="text-button landing-hosted-button" type="button" onClick={onUseHosted}>
+              Or use a hosted account
+            </button>
+          )}
+        </div>
+
+        <aside className="proof-anatomy" aria-label="What a Proof item keeps">
+          <div className="proof-anatomy-topline">
+            <span>What a Proof keeps</span>
+            <span className="local-stamp">Local</span>
+          </div>
+          <div className="proof-anatomy-field proof-anatomy-evidence">
+            <span>Evidence</span>
+            <strong>The actual words, photo, receipt, or finished thing.</strong>
+          </div>
+          <div className="proof-anatomy-grid">
+            <div className="proof-anatomy-field">
+              <span>Date</span>
+              <strong>When it happened</strong>
+            </div>
+            <div className="proof-anatomy-field">
+              <span>Source</span>
+              <strong>Where it came from</strong>
+            </div>
+          </div>
+          <div className="proof-anatomy-field">
+            <span>Context</span>
+            <strong>Category, tags, person, or project—only if useful.</strong>
+          </div>
+          <ul className="landing-category-list" aria-label="Example categories">
+            <li>Belonging</li>
+            <li>Shipped</li>
+            <li>Recovery</li>
+            <li>Kindness received</li>
+          </ul>
+          <p className="proof-anatomy-footer">
+            Stored in this browser profile · not synced · not encrypted
+          </p>
+        </aside>
       </section>
+
+      <section className="landing-section" id="how-it-works" aria-labelledby="how-heading">
+        <div className="section-heading">
+          <span>How it works</span>
+          <h2 id="how-heading">Concrete, source-faithful, and yours.</h2>
+        </div>
+        <ol className="landing-steps">
+          <li>
+            <span className="step-number">01</span>
+            <h3>Save what actually happened</h3>
+            <p>Add the exact words or thing. A photo is optional. Interpretation is not required.</p>
+          </li>
+          <li>
+            <span className="step-number">02</span>
+            <h3>Keep the receipts attached</h3>
+            <p>Date and source stay visible, so an item never floats free of its provenance.</p>
+          </li>
+          <li>
+            <span className="step-number">03</span>
+            <h3>Ask only when you want it</h3>
+            <p>Search “Show me things I finished.” Results come only from the Proof you saved.</p>
+          </li>
+        </ol>
+      </section>
+
+      <section className="landing-privacy" aria-labelledby="privacy-heading">
+        <div>
+          <span className="privacy-badge">Browser-local by default</span>
+          <h2 id="privacy-heading">A small tool with honest boundaries.</h2>
+        </div>
+        <div className="privacy-points">
+          <p><strong>Local means local.</strong> Saving and searching do not call a server in browser-local mode.</p>
+          <p><strong>You are the collector.</strong> No email, photo, message, finance, or memory mining.</p>
+          <p><strong>Backups are your safety net.</strong> They are portable plaintext, so keep them somewhere private.</p>
+        </div>
+      </section>
+
+      <section className="landing-open-source" aria-labelledby="open-source-heading">
+        <figure>
+          <img
+            src="/og.png"
+            alt="Proof Gallery — Keep the receipts your brain misplaces."
+            width="1200"
+            height="630"
+            loading="lazy"
+            decoding="async"
+          />
+        </figure>
+        <div className="open-source-copy">
+          <span className="landing-eyebrow">Free + open source</span>
+          <h2 id="open-source-heading">Public code. Your evidence is not.</h2>
+          <p>
+            Read it, run it locally, self-host it, or help make it better. Your
+            saved Proof never belongs in the public repository.
+          </p>
+          <div className="open-source-links" aria-label="Project links">
+            <a href="https://github.com/Muse-Nexus/proof-gallery" target="_blank" rel="noreferrer">Source code</a>
+            <a href="https://github.com/Muse-Nexus/proof-gallery/blob/main/docs/PRIVACY.md" target="_blank" rel="noreferrer">Privacy model</a>
+            <a href="https://github.com/Muse-Nexus/proof-gallery/blob/main/docs/SAFETY.md" target="_blank" rel="noreferrer">Safety constitution</a>
+            <a href="https://github.com/Muse-Nexus/proof-gallery/security" target="_blank" rel="noreferrer">Security</a>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-final-cta" aria-labelledby="final-cta-heading">
+        <span aria-hidden="true">✦</span>
+        <h2 id="final-cta-heading">Start with one real thing.</h2>
+        <p>A kind message. A finished project. A good day. Keep the evidence and let it remain exactly what it is.</p>
+        <button className="primary-button landing-primary" type="button" onClick={onUseLocal}>
+          Open my local gallery
+        </button>
+      </section>
+
+      <footer className="landing-footer">
+        <p>Free and open source under the MIT License.</p>
+        <p>Never use Proof to invalidate pain, create guilt, demand optimism, rank worth, or invent emotional meaning.</p>
+      </footer>
     </main>
   );
 }
@@ -101,11 +255,13 @@ function LocalStart({ onUseLocal }: { onUseLocal: () => void }) {
 function Gallery({
   ownerId,
   storageMode,
+  onVisitLanding,
   onSwitchMode,
   onSignOut,
 }: {
   ownerId: string;
   storageMode: StorageMode;
+  onVisitLanding: () => void;
   onSwitchMode?: () => void;
   onSignOut?: () => void;
 }) {
@@ -432,6 +588,9 @@ function Gallery({
               </button>
             </>
           )}
+          <button className="text-button" type="button" onClick={onVisitLanding}>
+            About
+          </button>
         </div>
       </header>
 
@@ -607,7 +766,14 @@ export default function App() {
   }
 
   if (storageMode === null || (storageMode === "hosted" && !isConfigured)) {
-    return <LocalStart onUseLocal={() => chooseStorageMode("local")} />;
+    return (
+      <LocalStart
+        onUseLocal={() => chooseStorageMode("local")}
+        onUseHosted={
+          isConfigured ? () => chooseStorageMode("hosted") : undefined
+        }
+      />
+    );
   }
   if (storageMode === "local") {
     return (
@@ -615,6 +781,7 @@ export default function App() {
         key={LOCAL_PROOF_OWNER_ID}
         ownerId={LOCAL_PROOF_OWNER_ID}
         storageMode="local"
+        onVisitLanding={() => setStorageMode(null)}
         onSwitchMode={
           isConfigured ? () => chooseStorageMode("hosted") : undefined
         }
@@ -630,6 +797,7 @@ export default function App() {
       key={session.user.id}
       ownerId={session.user.id}
       storageMode="hosted"
+      onVisitLanding={() => setStorageMode(null)}
       onSwitchMode={() => chooseStorageMode("local")}
       onSignOut={() => void getSupabase().auth.signOut()}
     />
