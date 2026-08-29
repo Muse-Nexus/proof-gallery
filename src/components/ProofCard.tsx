@@ -14,50 +14,87 @@ export function ProofCard({
   onEdit: (item: ProofItem) => void;
   onDelete: (item: ProofItem) => void;
 }) {
+  const hasEvidenceAttachment = Boolean(item.imagePath);
+  const hasEvidencePreview = Boolean(item.imagePath && item.imageUrl);
+
   return (
-    <article className="proof-card">
-      {item.imageUrl && (
-        <img
-          src={item.imageUrl}
-          alt="Attached evidence"
-          className="proof-image"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
+    <article
+      className={`proof-card proof-card--${
+        hasEvidencePreview
+          ? "with-image"
+          : hasEvidenceAttachment
+            ? "preview-unavailable"
+            : "text-only"
+      } proof-card--${item.category}`}
+    >
+      {hasEvidencePreview ? (
+        <figure className="proof-evidence-media">
+          <img
+            src={item.imageUrl ?? undefined}
+            alt={`Evidence image for ${item.title}`}
+            className="proof-image"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+          <figcaption>Evidence attachment</figcaption>
+        </figure>
+      ) : hasEvidenceAttachment ? (
+        <div className="proof-preview-unavailable">
+          <span>Evidence attachment saved</span>
+          <strong>Preview unavailable</strong>
+          <p>The image remains attached, but its preview could not be loaded right now.</p>
+          <span className="proof-text-cover-shapes" aria-hidden="true" />
+        </div>
+      ) : (
+        <div className="proof-text-cover">
+          <span>Text-only Proof</span>
+          <strong>No image attached</strong>
+          <span className="proof-text-cover-shapes" aria-hidden="true" />
+        </div>
       )}
+      <dl className="proof-receipt" aria-label="Evidence receipt">
+        <div>
+          <dt>Occurred</dt>
+          <dd>
+            {item.occurredOn ? (
+              <time dateTime={item.occurredOn}>
+                {formatProofDate(item.occurredOn)}
+              </time>
+            ) : (
+              "MISSING"
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Source</dt>
+          <dd>
+            {item.source || "MISSING"}
+            <small>{sourceTypeLabel(item.sourceType)}</small>
+          </dd>
+        </div>
+      </dl>
       <div className="proof-card-body">
         <div className="card-heading-row">
           <span className="category-pill">{categoryLabel(item.category)}</span>
-          {item.occurredOn ? (
-            <time dateTime={item.occurredOn}>{formatProofDate(item.occurredOn)}</time>
-          ) : (
-            <span>Occurred: MISSING</span>
-          )}
         </div>
         <h2>{item.title}</h2>
         <blockquote>{item.evidenceText}</blockquote>
-        <dl className="proof-meta">
-          <div>
-            <dt>Source type</dt>
-            <dd>{sourceTypeLabel(item.sourceType)}</dd>
-          </div>
-          <div>
-            <dt>Source detail</dt>
-            <dd>{item.source || "MISSING"}</dd>
-          </div>
-          {item.person && (
-            <div>
-              <dt>Person</dt>
-              <dd>{item.person}</dd>
-            </div>
-          )}
-          {item.project && (
-            <div>
-              <dt>Project</dt>
-              <dd>{item.project}</dd>
-            </div>
-          )}
-        </dl>
+        {(item.person || item.project) && (
+          <dl className="proof-meta">
+            {item.person && (
+              <div>
+                <dt>Person</dt>
+                <dd>{item.person}</dd>
+              </div>
+            )}
+            {item.project && (
+              <div>
+                <dt>Project</dt>
+                <dd>{item.project}</dd>
+              </div>
+            )}
+          </dl>
+        )}
         {item.tags.length > 0 && (
           <ul className="tag-list" aria-label="Tags">
             {item.tags.map((tag) => (

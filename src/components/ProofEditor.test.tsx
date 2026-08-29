@@ -14,7 +14,7 @@ const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(
   "createObjectURL",
 );
 
-function proofItem(): ProofItem {
+function proofItem(overrides: Partial<ProofItem> = {}): ProofItem {
   return {
     id: "11111111-1111-4111-8111-111111111111",
     userId: "22222222-2222-4222-8222-222222222222",
@@ -34,6 +34,7 @@ function proofItem(): ProofItem {
     createdAt: "2026-01-02T00:00:00.000Z",
     updatedAt: "2026-01-02T00:00:00.000Z",
     relevance: null,
+    ...overrides,
   };
 }
 
@@ -188,10 +189,10 @@ describe("Proof image selection", () => {
   it("shows a saved private image but hides it when a replacement is selected", async () => {
     renderEditor({ item: proofItem() });
 
-    expect(screen.getByRole("img", { name: "Current Proof attachment" }))
+    expect(screen.getByRole("img", { name: "Current evidence image for Synthetic evidence" }))
       .toHaveAttribute("src", proofItem().imageUrl);
     expect(
-      screen.getByRole("checkbox", { name: "Remove this image" }),
+      screen.getByRole("checkbox", { name: "Remove this evidence image" }),
     ).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Image or screenshot/i), {
@@ -200,8 +201,29 @@ describe("Proof image selection", () => {
     await screen.findByText(/Image validated and ready to save:/);
 
     expect(
-      screen.queryByRole("img", { name: "Current Proof attachment" }),
+      screen.queryByRole("img", { name: "Current evidence image for Synthetic evidence" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps a saved attachment truthful and removable when its preview is unavailable", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ item: proofItem({ imageUrl: null }), onSave });
+
+    expect(
+      screen.getByText("Evidence attachment saved · preview unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Remove this evidence image" }),
+    );
+    expect(
+      screen.getByText("Evidence attachment marked for removal"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0]?.[0].removeExistingImage).toBe(true);
   });
 
   it("rejects a non-image before accepting it for upload", async () => {

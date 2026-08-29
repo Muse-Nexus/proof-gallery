@@ -80,13 +80,15 @@ describe("standalone local storage boundary", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Stored in this browser profile · not synced · not encrypted/i),
+      screen.getByText(/Stored in this browser profile\. Not synced or encrypted/i),
     ).toBeInTheDocument();
+    expect(screen.getByText("AI-generated decorative image")).toBeInTheDocument();
+    expect(screen.getAllByText("Not saved Proof")).toHaveLength(2);
     expect(
       screen.getByRole("link", { name: "View the code" }),
     ).toHaveAttribute("href", "https://github.com/Muse-Nexus/proof-gallery");
     expect(
-      screen.queryByRole("heading", { name: "Restore the evidence you saved" }),
+      screen.queryByRole("heading", { name: "What do you need proof of right now?" }),
     ).not.toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
 
@@ -100,7 +102,7 @@ describe("standalone local storage boundary", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: "Restore the evidence you saved",
+        name: "What do you need proof of right now?",
       }),
     ).toBeInTheDocument();
     expect(
@@ -191,6 +193,9 @@ describe("standalone local storage boundary", () => {
     expect(
       await screen.findByText("Synthetic cross-tab Proof"),
     ).toBeInTheDocument();
+    const savedProof = screen.getByRole("region", { name: "Saved Proof" });
+    expect(savedProof.querySelector("img")).toBeNull();
+    expect(savedProof).toHaveTextContent("Text-only Proof");
 
     const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0]?.[0];
     if (!notify) throw new Error("Local change subscription was not registered");

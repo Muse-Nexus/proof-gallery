@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AuthPanel } from "./components/AuthPanel";
+import { DecorativeVisual } from "./components/DecorativeVisual";
 import { ProofCard } from "./components/ProofCard";
 import { ProofEditor } from "./components/ProofEditor";
 import {
@@ -137,39 +138,43 @@ function LocalStart({
           )}
         </div>
 
-        <aside className="proof-anatomy" aria-label="What a Proof item keeps">
-          <div className="proof-anatomy-topline">
-            <span>What a Proof keeps</span>
-            <span className="local-stamp">Local</span>
-          </div>
-          <div className="proof-anatomy-field proof-anatomy-evidence">
-            <span>Evidence</span>
-            <strong>The actual words, photo, receipt, or finished thing.</strong>
-          </div>
-          <div className="proof-anatomy-grid">
-            <div className="proof-anatomy-field">
-              <span>Date</span>
-              <strong>When it happened</strong>
-            </div>
-            <div className="proof-anatomy-field">
-              <span>Source</span>
-              <strong>Where it came from</strong>
-            </div>
-          </div>
-          <div className="proof-anatomy-field">
-            <span>Context</span>
-            <strong>Category, tags, person, or project—only if useful.</strong>
-          </div>
-          <ul className="landing-category-list" aria-label="Example categories">
-            <li>Belonging</li>
-            <li>Shipped</li>
-            <li>Recovery</li>
-            <li>Kindness received</li>
-          </ul>
-          <p className="proof-anatomy-footer">
-            Stored in this browser profile · not synced · not encrypted
+        <DecorativeVisual
+          className="landing-hero-visual"
+          kind="ai"
+          src="/visuals/evidence-desk-ai.webp"
+        />
+      </section>
+
+      <section
+        className="landing-visual-boundary"
+        aria-labelledby="visual-boundary-heading"
+      >
+        <DecorativeVisual
+          className="landing-collage-visual"
+          kind="unsplash"
+          src="/visuals/paper-collage-unsplash.webp"
+        />
+        <div className="visual-boundary-copy">
+          <span className="landing-eyebrow">Image forward, truth intact</span>
+          <h2 id="visual-boundary-heading">
+            Warm visuals can set the tone. They cannot fill in your history.
+          </h2>
+          <p>
+            Stock and AI art appear only as clearly labeled decoration. Inside
+            your gallery, every image is an evidence attachment you chose.
+            Text-only Proof stays text-only.
           </p>
-        </aside>
+          <div className="visual-truth-receipt" aria-label="Visual truth boundary">
+            <div>
+              <span>Evidence attachment</span>
+              <strong>Your image · stored with the item</strong>
+            </div>
+            <div>
+              <span>Decorative visual</span>
+              <strong>Public-page atmosphere · never item data</strong>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="landing-section" id="how-it-works" aria-labelledby="how-heading">
@@ -611,7 +616,7 @@ function Gallery({
 
       <section className="search-panel" aria-labelledby="search-title">
         <div>
-          <h2 id="search-title">Restore the evidence you saved</h2>
+          <h2 id="search-title">What do you need proof of right now?</h2>
           <p>
             Search is user-initiated and restricted to this {isLocal ? "local Proof" : "private"} collection.
           </p>
@@ -690,6 +695,16 @@ function Gallery({
         <p className="loading-state" role="status">Loading Proof…</p>
       ) : visible.length === 0 ? (
         <section className="empty-state">
+          {!searchResults && (
+            <div className="empty-state-visual">
+              <div className="empty-state-frames" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              <p>Illustration only · not saved Proof</p>
+            </div>
+          )}
           <h2>
             {searchResults
               ? "No matching Proof yet"

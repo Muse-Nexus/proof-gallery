@@ -28,6 +28,8 @@ source. Later, search only that collection.
   endpoint.
 - No app analytics or session replay, advertising, social feed, automatic
   collection, or ChorOS subscription.
+- An image-forward public design whose bundled stock/AI visuals are visibly
+  labeled decoration and are never used as item imagery or evidence.
 
 ## What it is not
 
@@ -102,6 +104,21 @@ unavailable.
 
 Proof text and search text leave your Supabase instance only when you configure
 an external embedding endpoint. Images are never sent for vision analysis.
+
+## Visual truth boundary
+
+The landing page bundles one credited Unsplash paper collage and one original
+AI-generated cut-paper illustration. They load from this app's own origin and
+make no automatic asset or API request to either provider. The credited
+Unsplash links navigate there only when a user chooses them. Both visuals are
+labeled **Not saved Proof** and exist only in public-page presentation.
+
+Inside the gallery, there are no stock or AI fallbacks. A card displays an image
+only when a stored evidence attachment has an available preview. If a saved
+attachment cannot be previewed, the card says so without claiming it is
+missing; only an item with no stored attachment is labeled **Text-only Proof ·
+No image attached**. Exact visual asset receipts and the AI prompt are in
+[docs/VISUAL_ASSETS.md](docs/VISUAL_ASSETS.md).
 
 ## Privacy architecture
 

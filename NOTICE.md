@@ -8,6 +8,23 @@ this extraction and publication under the repository's MIT License. The new
 repository contains no private Git history, production configuration, or
 personal evidence.
 
+## Bundled decorative visuals
+
+The public landing page bundles two presentation-only visuals. The interface
+labels both **Not saved Proof**; neither asset is part of any Proof item,
+backup, provenance record, embedding, or search result.
+
+- `paper-collage-unsplash.webp` is adapted from “Colorful paper cutouts form an
+  abstract collage” by [Jan L.](https://unsplash.com/@janlbhj), downloaded under
+  the [Unsplash License](https://unsplash.com/license). The original work is at
+  <https://unsplash.com/photos/colorful-paper-cutouts-form-an-abstract-collage-rUJP-3aLpBE>.
+- `evidence-desk-ai.webp` is an original decorative image created for this
+  project with OpenAI's built-in image generation tool on 2026-08-29. The tool
+  did not expose its underlying model identifier or version.
+
+Source receipts, transformations, SHA-256 hashes, and the exact AI prompt are
+recorded in [docs/VISUAL_ASSETS.md](docs/VISUAL_ASSETS.md).
+
 ## Bundled runtime dependencies
 
 Built frontend distributions include MIT-licensed runtime code from:
