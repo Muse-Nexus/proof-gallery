@@ -26,7 +26,9 @@ evidence. There is no Muse Nexus hosted evidence service in this repository.
 - Private images are stored under `<owner uuid>/...`, served only by short-lived
   signed URLs, and never published with `getPublicUrl`.
 - The bucket accepts JPEG, PNG, WebP, and GIF only, at 10 MB or less. The browser
-  checks file signatures before upload; SVG and HTML are rejected.
+  checks file signatures as soon as a file is selected and again before upload;
+  SVG and HTML are rejected. A new local file is not assigned to an HTML image
+  URL for preview; stored images are displayed through private signed URLs.
 - Retrieval functions query only `proof_items`, apply the current owner before
   ranking, and return stored fields rather than generated conclusions.
 - The Edge Functions use the caller's anon-key/JWT client. They do not use a

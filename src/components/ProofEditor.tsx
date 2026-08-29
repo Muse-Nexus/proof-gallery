@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import {
   PROOF_CATEGORIES,
   PROOF_SOURCE_TYPES,
   parseTags,
+  validateProofImage,
   type ProofCategory,
   type ProofItem,
   type ProofItemInput,
@@ -43,15 +44,29 @@ export function ProofEditor({
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const preview = useMemo(
-    () => (image ? URL.createObjectURL(image) : null),
-    [image],
-  );
-  useEffect(() => {
-    return () => {
-      if (preview) URL.revokeObjectURL(preview);
-    };
-  }, [preview]);
+  async function selectImage(event: ChangeEvent<HTMLInputElement>) {
+    const selected = event.target.files?.[0] ?? null;
+    setError(null);
+
+    if (!selected) {
+      setImage(null);
+      return;
+    }
+
+    try {
+      await validateProofImage(selected);
+      setImage(selected);
+      setRemoveExistingImage(false);
+    } catch (selectionError) {
+      event.target.value = "";
+      setImage(null);
+      setError(
+        selectionError instanceof Error
+          ? selectionError.message
+          : "The selected image could not be validated",
+      );
+    }
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -157,16 +172,22 @@ export function ProofEditor({
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
-              onChange={(event) => {
-                setImage(event.target.files?.[0] ?? null);
-                if (event.target.files?.[0]) setRemoveExistingImage(false);
-              }}
+              onChange={selectImage}
             />
           </label>
-          {(preview || existingPreview) && (
+          {image && (
+            <p className="selection-status full-width" role="status">
+              Image validated and ready to save: <strong>{image.name}</strong>
+            </p>
+          )}
+          {existingPreview && !image && (
             <div className="image-preview full-width">
-              <img src={preview ?? existingPreview ?? ""} alt="Proof attachment preview" />
-              {item?.imagePath && !image && (
+              <img
+                src={existingPreview}
+                alt="Current Proof attachment"
+                referrerPolicy="no-referrer"
+              />
+              {item?.imagePath && (
                 <label className="checkbox-row">
                   <input
                     type="checkbox"
