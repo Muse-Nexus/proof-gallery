@@ -1,7 +1,18 @@
 # Privacy-critical paths require owner review.
+/.github/CODEOWNERS @Liquidg10
+/.github/workflows/ @Liquidg10
+/index.html @Liquidg10
+/package.json @Liquidg10
+/bun.lock @Liquidg10
+/deno.lock @Liquidg10
+/vite.config.ts @Liquidg10
 /supabase/ @Liquidg10
+/src/main.tsx @Liquidg10
 /src/lib/proof-api.ts @Liquidg10
+/src/lib/local-proof-store.ts @Liquidg10
 /src/lib/supabase.ts @Liquidg10
+/src/App.tsx @Liquidg10
 /src/components/ProofEditor.tsx @Liquidg10
+/public/_headers @Liquidg10
 /docs/PRIVACY.md @Liquidg10
 /SECURITY.md @Liquidg10

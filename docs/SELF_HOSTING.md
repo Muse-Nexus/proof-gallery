@@ -1,6 +1,28 @@
 # Self-hosting
 
-## Local development
+## Choose a storage mode
+
+Proof Gallery can run as a static local-first app with no account or as an
+authenticated Supabase-backed app. The modes are separate. The app does not
+silently fall back, sync, co-search, or migrate evidence between them.
+
+## Browser-local development
+
+1. Install Bun.
+2. Run `bun install` and `bun run dev`.
+3. Open `http://localhost:5173` and choose **Use this browser**.
+
+Items and image bytes are stored in IndexedDB for that exact browser origin and
+profile. Search is deterministic Proof-only lexical ranking and calls no model,
+Supabase project, Drive, Dropbox, or other provider.
+
+Local mode is not encrypted by Proof Gallery and has no authenticated owner
+identity. Anyone with access to the browser profile, a privileged extension,
+device-administrator access, or JavaScript executing on the same origin may be
+able to read it. Clearing site data, eviction, private-browsing teardown, or
+profile/device loss may erase it. Export a backup regularly.
+
+## Supabase local development
 
 1. Install Bun, Docker, and the Supabase CLI.
 2. Run `bun install` and `supabase start`.
@@ -73,16 +95,39 @@ localhost, loopback, and `host.docker.internal` development endpoints.
 ## Frontend hosting
 
 `bun run build` creates `dist/`, which can be served by any static host. Use a
-dedicated trusted origin, not a path or subdomain that runs unrelated or
-third-party JavaScript: the Supabase owner session is stored at the browser
-origin boundary. The included `_headers` file provides a restrictive baseline
-for hosts that support that format. Update its `connect-src` and `img-src`
-directives if your Supabase host is not under `*.supabase.co`.
+dedicated trusted hostname that runs no unrelated or third-party JavaScript.
+Both IndexedDB and the Supabase owner session use the browser origin as a trust
+boundary. URL paths do not isolate browser storage, so GitHub Pages project
+paths under one `*.github.io` site are not separate storage boundaries. Use a
+dedicated exact hostname for a real local-data isolation boundary.
+
+The included `_headers` file provides a restrictive baseline for hosts that
+support that format. Update its `connect-src` and `img-src` directives if your
+Supabase host is not under `*.supabase.co`.
 
 Deployment is deliberately manual. This repository does not deploy into an
 operator's account on push.
 
-## Backup and restore
+## Local backup and restore
+
+Use the gallery's explicit backup control to download a versioned JSON archive.
+It contains evidence text, metadata, and image bytes in **plaintext**. Protect
+the file like the originals. It may be saved locally or manually placed in a
+private Google Drive or Dropbox folder; that is user-managed file storage, not
+a connector or background sync. SHA-256 receipts cover each item and image to
+detect corruption, but they do not prove who created the file and provide no
+encryption.
+
+Restore is also user-initiated and accepts a supported, validated archive. Test
+restore before depending on a backup. Browser persistence is best-effort and is
+not a replacement for an exported copy.
+
+Clearing local data removes records controlled by that site origin. It cannot
+remove downloaded archives, original source files, copies held by another
+program, or device/browser backups, and it does not guarantee secure erasure
+from the underlying medium.
+
+## Supabase backup and restore
 
 Back up both systems:
 

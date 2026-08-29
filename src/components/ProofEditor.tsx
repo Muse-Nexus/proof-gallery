@@ -1,4 +1,11 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   PROOF_CATEGORIES,
   PROOF_SOURCE_TYPES,
@@ -19,11 +26,13 @@ type EditorResult = {
 export function ProofEditor({
   item,
   busy,
+  privacyLabel = "Private · only you",
   onClose,
   onSave,
 }: {
   item: ProofItem | null;
   busy: boolean;
+  privacyLabel?: string;
   onClose: () => void;
   onSave: (result: EditorResult) => Promise<void>;
 }) {
@@ -43,6 +52,43 @@ export function ProofEditor({
   const [image, setImage] = useState<File | null>(null);
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    titleInputRef.current?.focus();
+    return () => previouslyFocused?.focus();
+  }, []);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
@@ -98,15 +144,17 @@ export function ProofEditor({
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="editor-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="editor-title"
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={handleDialogKeyDown}
       >
         <header className="editor-header">
           <div>
-            <span className="privacy-badge">Private · only you</span>
+            <span className="privacy-badge">{privacyLabel}</span>
             <h2 id="editor-title">{item ? "Edit Proof" : "Add Proof"}</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close editor">
@@ -116,7 +164,7 @@ export function ProofEditor({
         <form className="editor-form" onSubmit={submit}>
           <label>
             Title
-            <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
+            <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
           </label>
           <label className="full-width">
             Exact quote or evidence
@@ -130,7 +178,12 @@ export function ProofEditor({
           </label>
           <label>
             Occurred date
-            <input type="date" value={occurredOn} onChange={(event) => setOccurredOn(event.target.value)} />
+            <input
+              type="date"
+              value={occurredOn}
+              onInput={(event) => setOccurredOn(event.currentTarget.value)}
+              onChange={(event) => setOccurredOn(event.currentTarget.value)}
+            />
           </label>
           <label>
             Category
