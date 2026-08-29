@@ -3,6 +3,7 @@ import {
   EMPTY_PROOF_FILTERS,
   PROOF_VISIBILITY,
   isProofCategory,
+  isProofSourceType,
   normalizeTags,
   safeImageName,
   validateProofImage,
@@ -94,6 +95,7 @@ function payload(input: ProofItemInput) {
     provenance: {
       kind: "manual",
       captured_via: "proof_gallery",
+      source_type: input.sourceType,
       ...(source ? { source } : {}),
     },
     visibility: PROOF_VISIBILITY,
@@ -125,6 +127,9 @@ async function mapRow(row: ProofRow): Promise<ProofItem> {
     ? row.tags.filter((tag): tag is string => typeof tag === "string")
     : [];
   const provenance = asRecord(row.provenance);
+  const sourceType = isProofSourceType(provenance.source_type)
+    ? provenance.source_type
+    : "other";
   const rawRelevance = row.relevance ?? row.similarity ?? null;
   const relevance =
     rawRelevance === null || rawRelevance === ""
@@ -138,6 +143,7 @@ async function mapRow(row: ProofRow): Promise<ProofItem> {
     evidenceText: row.evidence_text,
     occurredOn: row.occurred_on,
     category: row.category,
+    sourceType,
     source: row.source,
     tags: normalizeTags(tags),
     person: row.person,

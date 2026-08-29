@@ -14,7 +14,8 @@ source. Later, search only that collection.
 
 - Private manual evidence with owner-only accounts and row-level security.
 - Images or screenshots in a dedicated private Storage bucket.
-- Exact evidence, occurred date, source, category, tags, person, and project.
+- Exact evidence, occurred date, source type/detail, category, tags, person, and
+  project.
 - Category/tag filters, newest ordering, and relevance ordering during search.
 - Proof-only lexical search that works without a model or paid API key.
 - Optional semantic embeddings through one OpenAI-compatible endpoint.

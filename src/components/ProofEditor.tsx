@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   PROOF_CATEGORIES,
+  PROOF_SOURCE_TYPES,
   parseTags,
   type ProofCategory,
   type ProofItem,
   type ProofItemInput,
+  type ProofSourceType,
 } from "../lib/proof";
 
 type EditorResult = {
@@ -29,6 +31,9 @@ export function ProofEditor({
   const [occurredOn, setOccurredOn] = useState(item?.occurredOn ?? "");
   const [category, setCategory] = useState<ProofCategory>(
     item?.category ?? "belonging",
+  );
+  const [sourceType, setSourceType] = useState<ProofSourceType>(
+    item?.sourceType ?? "other",
   );
   const [source, setSource] = useState(item?.source ?? "");
   const [tags, setTags] = useState(item?.tags.join(", ") ?? "");
@@ -58,6 +63,7 @@ export function ProofEditor({
           evidenceText,
           occurredOn: occurredOn || null,
           category,
+          sourceType,
           source: source || null,
           tags: parseTags(tags),
           person: person || null,
@@ -120,8 +126,19 @@ export function ProofEditor({
             </select>
           </label>
           <label>
-            Source or provenance
-            <input value={source} onChange={(event) => setSource(event.target.value)} maxLength={500} placeholder="Email, message, receipt, photo…" />
+            Source type
+            <select
+              value={sourceType}
+              onChange={(event) => setSourceType(event.target.value as ProofSourceType)}
+            >
+              {PROOF_SOURCE_TYPES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Exact source detail <span className="optional">optional</span>
+            <input value={source} onChange={(event) => setSource(event.target.value)} maxLength={500} placeholder="Sender, publication, filename, event…" />
           </label>
           <label>
             Tags

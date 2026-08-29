@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PROOF_CATEGORIES,
   PROOF_CONSTITUTION,
+  PROOF_SOURCE_TYPES,
   formatProofDate,
   normalizeTags,
   safeImageName,
@@ -18,6 +19,7 @@ function item(overrides: Partial<ProofItem>): ProofItem {
     evidenceText: "A fictional reviewer confirmed that the example was complete.",
     occurredOn: "2026-01-01",
     category: "shipped",
+    sourceType: "email",
     source: "Synthetic test fixture",
     tags: ["example"],
     person: null,
@@ -45,6 +47,22 @@ describe("Proof domain", () => {
       "shipped",
       "awards",
       "kindness_received",
+    ]);
+  });
+
+  it("offers broad manual provenance without enabling connectors", () => {
+    expect(PROOF_SOURCE_TYPES.map((sourceType) => sourceType.value)).toEqual([
+      "email",
+      "message",
+      "photo",
+      "receipt",
+      "award",
+      "work",
+      "memory",
+      "conversation",
+      "document",
+      "web",
+      "other",
     ]);
   });
 

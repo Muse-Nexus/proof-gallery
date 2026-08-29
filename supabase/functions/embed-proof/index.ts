@@ -11,6 +11,7 @@ type ProofRow = {
   tags: string[] | null;
   person: string | null;
   project: string | null;
+  provenance: Record<string, unknown> | null;
   updated_at: string;
 };
 
@@ -47,7 +48,7 @@ Deno.serve(async (request) => {
     const { data, error } = await client
       .from("proof_items")
       .select(
-        "id,title,evidence_text,category,source,tags,person,project,updated_at",
+        "id,title,evidence_text,category,source,tags,person,project,provenance,updated_at",
       )
       .eq("id", id)
       .eq("user_id", user.id)
@@ -75,6 +76,9 @@ Deno.serve(async (request) => {
       ...(row.tags ?? []),
       row.person,
       row.project,
+      typeof row.provenance?.source_type === "string"
+        ? row.provenance.source_type
+        : null,
     ]
       .filter((value): value is string => Boolean(value))
       .join("\n");

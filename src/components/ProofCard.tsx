@@ -1,6 +1,7 @@
 import {
   categoryLabel,
   formatProofDate,
+  sourceTypeLabel,
   type ProofItem,
 } from "../lib/proof";
 
@@ -37,7 +38,11 @@ export function ProofCard({
         <blockquote>{item.evidenceText}</blockquote>
         <dl className="proof-meta">
           <div>
-            <dt>Source</dt>
+            <dt>Source type</dt>
+            <dd>{sourceTypeLabel(item.sourceType)}</dd>
+          </div>
+          <div>
+            <dt>Source detail</dt>
             <dd>{item.source || "MISSING"}</dd>
           </div>
           {item.person && (

@@ -12,7 +12,22 @@ export const PROOF_CATEGORIES = [
   { value: "kindness_received", label: "Kindness received" },
 ] as const;
 
+export const PROOF_SOURCE_TYPES = [
+  { value: "email", label: "Email" },
+  { value: "message", label: "Text or chat" },
+  { value: "photo", label: "Photo" },
+  { value: "receipt", label: "Payment or receipt" },
+  { value: "award", label: "Award or certificate" },
+  { value: "work", label: "Work or project" },
+  { value: "memory", label: "Personal memory" },
+  { value: "conversation", label: "Conversation or in person" },
+  { value: "document", label: "Document" },
+  { value: "web", label: "Website or social post" },
+  { value: "other", label: "Other" },
+] as const;
+
 export type ProofCategory = (typeof PROOF_CATEGORIES)[number]["value"];
+export type ProofSourceType = (typeof PROOF_SOURCE_TYPES)[number]["value"];
 export type ProofSort = "newest" | "relevance";
 
 export interface ProofItem {
@@ -22,6 +37,7 @@ export interface ProofItem {
   evidenceText: string;
   occurredOn: string | null;
   category: ProofCategory;
+  sourceType: ProofSourceType;
   source: string | null;
   tags: string[];
   person: string | null;
@@ -40,6 +56,7 @@ export interface ProofItemInput {
   evidenceText: string;
   occurredOn: string | null;
   category: ProofCategory;
+  sourceType: ProofSourceType;
   source: string | null;
   tags: string[];
   person: string | null;
@@ -62,6 +79,9 @@ export const PROOF_CONSTITUTION =
 const categoryValues = new Set<string>(
   PROOF_CATEGORIES.map((category) => category.value),
 );
+const sourceTypeValues = new Set<string>(
+  PROOF_SOURCE_TYPES.map((sourceType) => sourceType.value),
+);
 
 export function isProofCategory(value: unknown): value is ProofCategory {
   return typeof value === "string" && categoryValues.has(value);
@@ -71,6 +91,17 @@ export function categoryLabel(category: ProofCategory): string {
   return (
     PROOF_CATEGORIES.find((candidate) => candidate.value === category)?.label ??
     category
+  );
+}
+
+export function isProofSourceType(value: unknown): value is ProofSourceType {
+  return typeof value === "string" && sourceTypeValues.has(value);
+}
+
+export function sourceTypeLabel(sourceType: ProofSourceType): string {
+  return (
+    PROOF_SOURCE_TYPES.find((candidate) => candidate.value === sourceType)
+      ?.label ?? sourceType
   );
 }
 

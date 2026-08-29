@@ -71,7 +71,11 @@ const fixtureProof = (userId: string) => ({
   occurred_on: "2026-01-17",
   category: "competence",
   source: "Synthetic client email - fixture only",
-  provenance: { kind: "synthetic_fixture", fixture: true },
+  provenance: {
+    kind: "synthetic_fixture",
+    fixture: true,
+    source_type: "email",
+  },
   tags: ["trusted", "shipped"],
   person: "Synthetic client",
   project: "Fixture release",
@@ -330,6 +334,7 @@ try {
     edgeSearch.data.items[0].source,
     "Synthetic client email - fixture only",
   );
+  assert.equal(edgeSearch.data.items[0].provenance.source_type, "email");
 
   const edgeIndex = await ownerA.client.functions.invoke("embed-proof", {
     body: { id: proofAId },
