@@ -113,6 +113,8 @@ The interface uses medium-weight system typography with no external font
 request. Filtered-empty states do not claim that saved evidence is missing,
 and the editor stays open while a save is pending to prevent accidental
 dismissal through Escape, the backdrop, or its close controls.
+Add, Edit, and Delete wait for other pending operations to finish, so an
+unrelated search or backup cannot open an editor with locked save controls.
 
 The landing page bundles one credited Unsplash paper collage and one original
 AI-generated cut-paper illustration. They load from this app's own origin and

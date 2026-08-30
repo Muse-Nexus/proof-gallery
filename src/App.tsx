@@ -549,6 +549,7 @@ function Gallery({
             className="primary-button"
             type="button"
             onClick={() => setEditor("new")}
+            disabled={busy}
           >
             Add Proof
           </button>
@@ -767,13 +768,13 @@ function Gallery({
               Show all Proof
             </button>
           ) : (
-            <button className="primary-button" type="button" onClick={() => setEditor("new")}>Add the first Proof</button>
+            <button className="primary-button" type="button" disabled={busy} onClick={() => setEditor("new")}>Add the first Proof</button>
           )}
         </section>
       ) : (
         <section className="gallery-grid" aria-label="Saved Proof">
           {visible.map((item) => (
-            <ProofCard key={item.id} item={item} onEdit={setEditor} onDelete={(candidate) => void remove(candidate)} />
+            <ProofCard key={item.id} item={item} disabled={busy} onEdit={setEditor} onDelete={(candidate) => void remove(candidate)} />
           ))}
         </section>
       )}

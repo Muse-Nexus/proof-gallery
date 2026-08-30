@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -300,5 +301,39 @@ describe("standalone local storage boundary", () => {
     expect(screen.getByLabelText("Tag")).toHaveValue("");
     expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
     expect(screen.getByText(localItem().title)).toBeInTheDocument();
+  });
+
+  it("does not open an editor or start deletion during an unrelated pending operation", async () => {
+    const item = localItem();
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    let finishSearch!: (value: Awaited<ReturnType<typeof searchLocalProofItems>>) => void;
+    vi.mocked(searchLocalProofItems).mockImplementation(() => new Promise((resolve) => {
+      finishSearch = resolve;
+    }));
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("1 saved Proof item");
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search your Proof" }), {
+      target: { value: "synthetic evidence" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+
+    for (const name of ["Add Proof", "Edit", "Delete"]) {
+      const control = screen.getByRole("button", { name });
+      expect(control).toBeDisabled();
+      fireEvent.click(control);
+    }
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search your Proof" })).toBeDisabled();
+    expect(screen.getByLabelText("Category")).toBeDisabled();
+    expect(screen.getByLabelText("Tag")).toBeDisabled();
+
+    await act(async () => finishSearch({ items: [item], semanticDegraded: true }));
+    const edit = screen.getByRole("button", { name: "Edit" });
+    expect(edit).toBeEnabled();
+    fireEvent.click(edit);
+    expect(screen.getByRole("button", { name: "Close editor" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
