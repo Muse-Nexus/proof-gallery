@@ -341,9 +341,25 @@ function Gallery({
     searchResults ?? filtered,
     searchResults ? "relevance" : "newest",
   );
+  const hasFilters = Boolean(filters.category || filters.tag);
+  const hasSearch = searchResults !== null;
+  const isNarrowed = hasFilters || hasSearch;
+
+  function clearSearch() {
+    setSearchResults(null);
+    setQuery("");
+    setSemanticDegraded(false);
+  }
+
+  function clearFilters() {
+    setFilters(EMPTY_PROOF_FILTERS);
+    setSearchResults(null);
+    setSemanticDegraded(false);
+  }
 
   async function runSearch(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -624,25 +640,28 @@ function Gallery({
         <form className="search-form" onSubmit={runSearch}>
           <input
             type="search"
+            aria-label="Search your Proof"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setSearchResults(null);
+              setSemanticDegraded(false);
+            }}
             placeholder="Show me times people valued my work…"
             minLength={3}
             maxLength={2000}
             required
+            disabled={busy}
           />
           <button className="primary-button" disabled={busy}>Search Proof</button>
-          {searchResults && (
+          {(hasSearch || query) && (
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                setSearchResults(null);
-                setQuery("");
-                setSemanticDegraded(false);
-              }}
+              onClick={clearSearch}
+              disabled={busy}
             >
-              Clear
+              Clear search
             </button>
           )}
         </form>
@@ -662,6 +681,7 @@ function Gallery({
           Category
           <select
             value={filters.category ?? ""}
+            disabled={busy}
             onChange={(event) =>
               setFilters((current) => ({
                 ...current,
@@ -679,14 +699,32 @@ function Gallery({
           Tag
           <select
             value={filters.tag ?? ""}
+            disabled={busy}
             onChange={(event) => setFilters((current) => ({ ...current, tag: event.target.value || null }))}
           >
             <option value="">All tags</option>
             {tags.map((tag) => <option key={tag} value={tag}>#{tag}</option>)}
           </select>
         </label>
-        <span className="sort-label">{searchResults ? "Sorted by relevance" : "Newest first"}</span>
+        {hasFilters && (
+          <button className="text-button" type="button" onClick={clearFilters} disabled={busy}>
+            Clear filters
+          </button>
+        )}
       </section>
+
+      {!loading && (
+        <div className="gallery-summary" role="status">
+          <span>
+            {hasSearch
+              ? `${visible.length} search ${visible.length === 1 ? "result" : "results"}`
+              : hasFilters
+                ? `${visible.length} of ${items.length} saved Proof ${items.length === 1 ? "item" : "items"}`
+                : `${items.length} saved Proof ${items.length === 1 ? "item" : "items"}`}
+          </span>
+          <span>{hasSearch ? "Sorted by relevance" : "Newest first"}</span>
+        </div>
+      )}
 
       {error && <p className="error-banner" role="alert">{error}</p>}
       {notice && <p className="notice-banner" role="status">{notice}</p>}
@@ -695,7 +733,7 @@ function Gallery({
         <p className="loading-state" role="status">Loading Proof…</p>
       ) : visible.length === 0 ? (
         <section className="empty-state">
-          {!searchResults && (
+          {!isNarrowed && (
             <div className="empty-state-visual">
               <div className="empty-state-frames" aria-hidden="true">
                 <span />
@@ -706,18 +744,31 @@ function Gallery({
             </div>
           )}
           <h2>
-            {searchResults
+            {hasSearch
               ? "No matching Proof yet"
-              : isLocal
-                ? "Your local gallery is empty"
-                : "Your private gallery is empty"}
+              : hasFilters
+                ? "No Proof matches these filters"
+                : isLocal
+                  ? "Your local gallery is empty"
+                  : "Your private gallery is empty"}
           </h2>
           <p>
-            {searchResults
+            {hasSearch
               ? "Try different literal terms or clear a filter. Results are never padded with ordinary memories."
-              : "Save one concrete message, receipt, photo, finished thing, or memory with its date and source."}
+              : hasFilters
+                ? "Try another category or tag, or show all your saved Proof."
+                : "Save one concrete message, receipt, photo, finished thing, or memory with its date and source."}
           </p>
-          {!searchResults && <button className="primary-button" onClick={() => setEditor("new")}>Add the first Proof</button>}
+          {isNarrowed ? (
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => {
+              clearSearch();
+              clearFilters();
+            }}>
+              Show all Proof
+            </button>
+          ) : (
+            <button className="primary-button" type="button" onClick={() => setEditor("new")}>Add the first Proof</button>
+          )}
         </section>
       ) : (
         <section className="gallery-grid" aria-label="Saved Proof">

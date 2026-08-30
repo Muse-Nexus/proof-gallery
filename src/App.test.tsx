@@ -11,6 +11,7 @@ import {
   listLocalProofItems,
   releaseLocalProofImageUrls,
   requestLocalProofPersistence,
+  searchLocalProofItems,
   subscribeToLocalProofChanges,
 } from "./lib/local-proof-store";
 import type { ProofItem } from "./lib/proof";
@@ -59,6 +60,10 @@ function localItem(): ProofItem {
 
 beforeEach(() => {
   vi.mocked(listLocalProofItems).mockResolvedValue([]);
+  vi.mocked(searchLocalProofItems).mockResolvedValue({
+    items: [],
+    semanticDegraded: true,
+  });
   vi.mocked(subscribeToLocalProofChanges).mockReturnValue(() => undefined);
 });
 
@@ -213,5 +218,87 @@ describe("standalone local storage boundary", () => {
     expect(
       screen.getByText("Local Proof was removed in another open tab."),
     ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Category", "awards"],
+    ["Tag", "synthetic"],
+  ])("shows honest empty results and clears the %s filter", async (label, value) => {
+    const secondItem = {
+      ...localItem(),
+      id: "22222222-2222-4222-8222-222222222222",
+      title: "Synthetic second Proof",
+      category: "creativity" as const,
+      tags: ["example"],
+    };
+    vi.mocked(listLocalProofItems).mockResolvedValue([localItem(), secondItem]);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    expect(await screen.findByText("2 saved Proof items")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    if (label === "Category") {
+      expect(screen.getByRole("heading", { name: "No Proof matches these filters" }))
+        .toBeInTheDocument();
+      expect(screen.getByText("0 of 2 saved Proof items")).toBeInTheDocument();
+      expect(screen.queryByText("Your local gallery is empty")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Add the first Proof" }))
+        .not.toBeInTheDocument();
+    } else {
+      expect(screen.getByText("1 of 2 saved Proof items")).toBeInTheDocument();
+      expect(screen.queryByText(secondItem.title)).not.toBeInTheDocument();
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByText("2 saved Proof items")).toBeInTheDocument();
+    expect(screen.getByText(secondItem.title)).toBeInTheDocument();
+    expect(screen.getByLabelText(label)).toHaveValue("");
+    expect(searchLocalProofItems).not.toHaveBeenCalled();
+  });
+
+  it("names search accessibly and clears results without removing filters or saved Proof", async () => {
+    const item = localItem();
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    vi.mocked(searchLocalProofItems).mockResolvedValue({
+      items: [item],
+      semanticDegraded: true,
+    });
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("1 saved Proof item");
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "shipped" } });
+    const input = screen.getByRole("searchbox", { name: "Search your Proof" });
+    fireEvent.change(input, { target: { value: "synthetic shipped" } });
+    expect(searchLocalProofItems).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    expect(await screen.findByText("1 search result")).toBeInTheDocument();
+    expect(searchLocalProofItems).toHaveBeenCalledWith("synthetic shipped", {
+      category: "shipped", tag: null,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(input).toHaveValue("");
+    expect(screen.getByLabelText("Category")).toHaveValue("shipped");
+    expect(screen.getByText(item.title)).toBeInTheDocument();
+    expect(screen.getByText("1 of 1 saved Proof item")).toBeInTheDocument();
+    expect(screen.queryByText("Sorted by relevance")).not.toBeInTheDocument();
+  });
+
+  it("can recover from an empty search by showing all saved Proof", async () => {
+    vi.mocked(listLocalProofItems).mockResolvedValue([localItem()]);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("1 saved Proof item");
+    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "synthetic" } });
+    const input = screen.getByRole("searchbox", { name: "Search your Proof" });
+    fireEvent.change(input, { target: { value: "no matching terms" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    expect(await screen.findByText("0 search results")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all Proof" }));
+    expect(input).toHaveValue("");
+    expect(screen.getByLabelText("Tag")).toHaveValue("");
+    expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
+    expect(screen.getByText(localItem().title)).toBeInTheDocument();
   });
 });
