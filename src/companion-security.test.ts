@@ -5,13 +5,14 @@ const native = readFileSync("companion/macos/Sources/ProofPhotosCompanion/Photos
 const entrypoint = readFileSync("companion/macos/Sources/ProofPhotosCompanion/ProofCompanionApp.swift", "utf8");
 const vision = readFileSync("companion/macos/Sources/CompanionVision/LocalTextRead.swift", "utf8");
 const entitlements = readFileSync("companion/macos/ProofPhotosCompanion.entitlements", "utf8");
-it("keeps the native adapter read-only and without network entitlements", () => {
+it("keeps Photos read-only and grants only a loopback-bound server, never an internet client", () => {
   expect(native).not.toMatch(/performChanges|PHAssetChangeRequest|PHAssetCollectionChangeRequest|URLSession|URLRequest/);
   expect(native).toContain("@Published var allowICloudDownloads = false");
   expect(native).toContain("options.isNetworkAccessAllowed = allowNetwork");
   expect(entitlements).toContain("com.apple.security.app-sandbox");
   expect(entitlements).toContain("com.apple.security.personal-information.photos-library");
-  expect(entitlements).not.toMatch(/network.client|network.server|pictures.read|all-files/);
+  expect(entitlements).not.toMatch(/network.client|pictures.read|all-files/);
+  expect(entitlements).toContain("com.apple.security.network.server");
 });
 it("makes iCloud downloads explicit, one-shot and reset by Pause", () => {
   expect(native).toContain('if !allowICloudDownloads && !observing');

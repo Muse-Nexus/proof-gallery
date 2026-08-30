@@ -11,7 +11,8 @@ connector, background collector, native companion, or AI interpretation exists
 until it actually works. The web intake is selected local media and explicit
 companion review files. The Mac companion reads Recent Photos, Favorites, or a
 chosen album/date range while open, with a separate owner-triggered Photos permission flow.
-It exports private candidate files, not saved-Proof backups or automatic sync.
+It exports private candidate files or explicitly transfers one prepared batch
+over a five-minute same-Mac pairing. Neither route approves Proof or syncs accounts.
 
 - Keep source selection, pending review, approved Proof, and retrieval distinct.
 - Never feed companion output into Restore: that writes saved Proof. Use the
@@ -19,7 +20,10 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
 - Native HEIC JPEG previews must retain their derivative label and original
   digest/source receipt through review, edits, and backups. Originals stay in
   Photos; import time must never replace missing Photos capture metadata.
-- No PhotoKit mutation APIs, general network entitlement, or cloud AI.
+- No PhotoKit mutation APIs, network-client entitlement, or cloud AI. The only
+  server entitlement supports an explicitly started IPv4-loopback listener with
+  exact Origin/Host checks, a random bearer token, bounded requests, and expiry.
+  Never widen it to LAN interfaces, arbitrary origins, file access, or Photos commands.
   Request Photos authorization only after Connect; read media only after the
   user chooses a bounded source and starts it. Pause/Disconnect must cancel
   active reads and observers. Closing/quitting must guard unexported candidates.
@@ -41,8 +45,13 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
   silently treat it as an AI assessment or as approval. A short note is not a
   grant to scan other sources. Related lookup uses saved Proof in the current
   owner/collection only, explains shared words, and runs only on request.
-- The current story feature is a derived reading view of explicitly chosen
-  saved notes/photos, not generated prose or a new evidence item. Preserve exact
+- The story feature is a derived reading view of explicitly chosen saved
+  notes/photos, not generated autobiography or a new evidence item. Optional
+  on-device Apple generation selects source IDs only; deterministic code must
+  display full original notes, never a substring that drops negation/context.
+  Meaning matching uses only owner-filtered saved Proof text, on request, and
+  preserves relevance order. Keep lexical fallback explicit; no cloud fallback.
+  Cancel requests on disconnect, deletion, source edits, and navigation. Preserve exact
   words, dates, source labels, and attachment receipts; separate unknown dates.
   Never invent transitions, causal links, feelings, identities, or life lessons.
 - Use unknown/blank fields rather than invented meaning. Import time and file
@@ -56,6 +65,10 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
   snapshot, log, commit, publish, or send it to team memory, instructions, lessons,
   fixtures, analytics, or a public deployment bundle.
 - Browser-local is unencrypted and profile-local, not account-isolated or synced.
+  The default downloaded backup is encrypted (AES-256-GCM/PBKDF2); it does not
+  encrypt active browser storage. Include pending media and saved draft notes.
+  Restore validates first, then writes both stores atomically; conflicts abort,
+  exact duplicates skip, pending stays pending. Never persist passphrases/tokens.
   A copy from ChorOS is a separate copy, not a migration or live integration.
 - Use deterministic validation, storage, approval, filtering, and deletion. Use
   one model only if needed; no mandatory orchestration or automatic vision calls.
@@ -63,4 +76,7 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
 Use a clean branch, synthetic tests, and update the relevant docs. Run `bun run
 check` and the existing frozen Deno checks. For media changes verify pending
 isolation, atomic approval, MIME limits, SHA integrity, stale tabs, legacy backups,
-and the absence of network calls. Production deployment needs explicit approval.
+and the absence of unrequested/external evidence network calls. Pairing tests use
+synthetic data only. Public native release needs Developer ID, hardened runtime,
+notarization, and stapling; ad-hoc builds are local development, not public readiness.
+Production deployment needs explicit approval.

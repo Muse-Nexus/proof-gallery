@@ -35,6 +35,7 @@ vi.mock("./lib/local-proof-store", () => ({
   subscribeToLocalProofChanges: vi.fn().mockReturnValue(() => undefined),
   updateLocalProofItem: vi.fn(),
 }));
+vi.mock("./lib/encrypted-backup", () => ({ isEncryptedProofBackup: vi.fn().mockResolvedValue(false) }));
 
 function localItem(): ProofItem {
   return {
@@ -143,6 +144,7 @@ describe("standalone local storage boundary", () => {
       imported: 2,
       importedCount: 2,
       items: [],
+      pendingImported: 0,
     });
     vi.mocked(requestLocalProofPersistence).mockResolvedValue(true);
     render(<App />);
@@ -151,7 +153,8 @@ describe("standalone local storage boundary", () => {
     );
     await screen.findByRole("button", { name: "Restore" });
 
-    fireEvent.change(screen.getByLabelText("Restore Proof Gallery backup"), {
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.change(screen.getByLabelText("Backup file"), {
       target: {
         files: [
           new File(["synthetic backup"], "proof-backup.json", {
@@ -160,13 +163,14 @@ describe("standalone local storage boundary", () => {
         ],
       },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and restore" }));
 
     await waitFor(() =>
       expect(requestLocalProofPersistence).toHaveBeenCalledOnce(),
     );
     expect(
       screen.getByText(
-        "2 Proof items restored locally. Keep the backup somewhere private for recovery.",
+        "Restored 2 saved Proof and 0 pending review items. Identical existing items were left unchanged.",
       ),
     ).toBeInTheDocument();
   });

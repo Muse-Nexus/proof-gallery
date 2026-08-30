@@ -3,7 +3,7 @@ import { Blob as NodeBlob, File as NodeFile } from "node:buffer";
 import { webcrypto } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  clearLocalProofItems, createLocalProofItem, exportLocalProofBackup, importLocalProofBackup,
+  clearLocalProofItems, createLocalProofItem, exportLocalProofBackup, exportLocalProofFullBackup, importLocalProofBackup,
   listLocalProofCandidates, listLocalProofItems, resolveLocalProofCandidates,
   searchLocalProofItems, stageLocalProofMedia, updateLocalProofItem,
   type LocalProofCandidate,
@@ -33,6 +33,47 @@ beforeEach(async () => {
 afterAll(() => vi.unstubAllGlobals());
 
 describe("private local media review", () => {
+  it("fully restores saved draft notes while keeping candidates out of Proof search", async () => {
+    await stageLocalProofMedia([png(20)]);
+    const [candidate] = await listLocalProofCandidates();
+    await resolveLocalProofCandidates([{ candidate, input: { ...candidate.input, evidenceText: "Synthetic note about the tree", tags: ["synthetic"] } }], "edit");
+    const backup = await exportLocalProofFullBackup();
+    const [edited] = await listLocalProofCandidates();
+    await resolveLocalProofCandidates([{ candidate: edited }], "skip");
+    expect((await importLocalProofBackup(backup)).pendingImported).toBe(1);
+    const [restored] = await listLocalProofCandidates();
+    expect(restored.input).toEqual(edited.input);
+    expect(restored.revision).toBe(edited.revision);
+    expect((await searchLocalProofItems("tree")).items).toHaveLength(0);
+    expect((await importLocalProofBackup(backup)).pendingImported).toBe(0);
+  });
+  it("atomically rejects cross-state and changed-draft conflicts", async () => {
+    await stageLocalProofMedia([png(21), png(22)]);
+    const backup = await exportLocalProofFullBackup();
+    const [candidate] = await listLocalProofCandidates();
+    await resolveLocalProofCandidates([approved(candidate)], "approve");
+    await expect(importLocalProofBackup(backup)).rejects.toThrow("conflicts");
+    expect(await listLocalProofItems()).toHaveLength(1);
+    expect(await listLocalProofCandidates()).toHaveLength(1);
+    const fresh = await exportLocalProofFullBackup();
+    const [pending] = await listLocalProofCandidates();
+    await resolveLocalProofCandidates([{ candidate: pending, input: { ...pending.input, evidenceText: "Newer synthetic draft" } }], "edit");
+    await expect(importLocalProofBackup(fresh)).rejects.toThrow("conflicts");
+    expect((await listLocalProofCandidates())[0].input.evidenceText).toBe("Newer synthetic draft");
+  });
+  it("rejects corrupted media and missing draft category before any restore write", async () => {
+    await stageLocalProofMedia([png(23)]);
+    const document = JSON.parse(await (await exportLocalProofFullBackup()).text());
+    const [candidate] = await listLocalProofCandidates();
+    await resolveLocalProofCandidates([{ candidate }], "skip");
+    delete document.pending[0].input.category;
+    await expect(importLocalProofBackup(new Blob([JSON.stringify(document)]))).rejects.toThrow();
+    expect(await listLocalProofCandidates()).toHaveLength(0);
+    document.pending[0].input.category = null;
+    document.pending[0].media.integritySha256 = "0".repeat(64);
+    await expect(importLocalProofBackup(new Blob([JSON.stringify(document)]))).rejects.toThrow("integrity");
+    expect(await listLocalProofCandidates()).toHaveLength(0);
+  });
   it("persists pending bytes separately, without inventing date, category, or words", async () => {
     const network = vi.spyOn(globalThis, "fetch");
     expect(await stageLocalProofMedia([png()])).toEqual({ added: 1, duplicates: 0, rejected: [] });

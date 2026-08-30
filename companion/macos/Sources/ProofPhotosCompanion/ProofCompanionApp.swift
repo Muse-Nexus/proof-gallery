@@ -99,6 +99,15 @@ struct CompanionView: View {
                     }
                 }
                 Text(model.message).font(.callout).textSelection(.enabled)
+                HStack {
+                    Button("Connect to Gallery on this Mac", action: model.startBridge).disabled(model.scanning)
+                    if !model.pairingCode.isEmpty {
+                        Button("Copy pairing code") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(model.pairingCode, forType: .string) }
+                        Button("Stop connection", action: model.stopBridge)
+                    }
+                }
+                Text("Optional same-Mac transfer and on-device text tools. The code grants access for five minutes; do not share it. Stop revokes the session, but cannot retract bytes already received. No internet AI or automatic Proof approval.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if !model.skipSummary.isEmpty {
                     Text("Skipped: \(model.skipSummary)").font(.caption).foregroundStyle(.secondary)
                 }

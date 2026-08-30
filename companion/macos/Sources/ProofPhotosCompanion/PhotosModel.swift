@@ -60,6 +60,9 @@ private final class ResourceRead: @unchecked Sendable {
     @Published var skipped = 0
     @Published var skipReasons: [String: Int] = [:]
     @Published var exported = false
+    @Published var pairingCode = ""
+    private let bridge = LocalBridge()
+    private var bridgeGeneration = UUID()
     private var generation = 0
     private var seen = Set<String>()
     private var task: Task<Void, Never>?
@@ -115,12 +118,37 @@ private final class ResourceRead: @unchecked Sendable {
     }
 
     func pause() {
+        stopBridge()
         if observing { PHPhotoLibrary.shared().unregisterChangeObserver(self); observing = false }
         active = false; generation += 1; scanAgain = false
         activeRead?.cancel(); activeRead = nil; task?.cancel(); task = nil; scanning = false
         activeTextRead?.cancel(); activeTextRead = nil
         allowICloudDownloads = false
         message = "Paused. Prepared photos remain in memory until you export or clear them."
+    }
+
+    func stopBridge() {
+        bridgeGeneration = UUID(); pairingCode = ""; bridge.stop()
+    }
+
+    func startBridge() {
+        pause()
+        let generation = bridgeGeneration
+        let snapshot = photos
+        message = "Preparing a five-minute same-Mac connection. No internet upload."
+        Task {
+            do {
+                let data = try await Task.detached { snapshot.isEmpty ? nil : try ReviewPackage(items: snapshot).encoded() }.value
+                guard bridgeGeneration == generation else { return }
+                bridge.start(review: data) { [weak self] code in
+                    Task { @MainActor in
+                        guard let self, self.bridgeGeneration == generation else { return }
+                        self.pairingCode = code ?? ""
+                        self.message = code == nil ? "Connection stopped or expired. Start again to pair." : "Paste the pairing code into Proof Gallery → Connect this Mac. Only prepared photos can transfer; text tools run on this Mac. Expires in five minutes."
+                    }
+                }
+            } catch { message = "Could not prepare this connection. The review-file export is still available." }
+        }
     }
 
     func disconnect() {

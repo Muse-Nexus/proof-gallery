@@ -3,7 +3,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -13,6 +12,9 @@ import { ProofCard } from "./components/ProofCard";
 import { ProofEditor } from "./components/ProofEditor";
 import { MediaInbox } from "./components/MediaInbox";
 import { ProofStory } from "./components/ProofStory";
+import { BackupPanel } from "./components/BackupPanel";
+import { CompanionPanel } from "./components/CompanionPanel";
+import { semanticCompanionSearch, type CompanionSession } from "./lib/local-companion";
 import {
   createProofItem,
   deleteProofItem,
@@ -25,8 +27,6 @@ import {
   clearLocalProofItems,
   createLocalProofItem,
   deleteLocalProofItem,
-  exportLocalProofBackup,
-  importLocalProofBackup,
   listLocalProofItems,
   releaseLocalProofImageUrls,
   requestLocalProofPersistence,
@@ -59,17 +59,6 @@ function initialStorageMode(): StorageMode | null {
     // Fall through to an explicit local choice or configured hosted mode.
   }
   return null;
-}
-
-function downloadBackup(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `proof-gallery-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 function LocalStart({
@@ -210,9 +199,9 @@ function LocalStart({
           <h2 id="privacy-heading">A small tool with honest boundaries.</h2>
         </div>
         <div className="privacy-points">
-          <p><strong>Local means local.</strong> Saving and searching do not call a server in browser-local mode.</p>
+          <p><strong>Local means local.</strong> Browser saving and text search stay here. Optional meaning matching uses a paired companion on this Mac, not a cloud service.</p>
           <p><strong>Permission comes first.</strong> Only sources you choose. Nothing silently searches your accounts or photo library.</p>
-          <p><strong>Backups are your safety net.</strong> They are portable plaintext, so keep them somewhere private.</p>
+          <p><strong>Keep a recovery copy.</strong> Encrypted backups include saved Proof, pending media, and saved notes. Keep the passphrase safe.</p>
         </div>
       </section>
 
@@ -289,7 +278,19 @@ function Gallery({
   const [mediaDirty, setMediaDirty] = useState(false);
   const [storySeedId, setStorySeedId] = useState<string | null>(null);
   const storySeed = items.find(item => item.id === storySeedId);
-  const importInput = useRef<HTMLInputElement>(null);
+  const [backupMode, setBackupMode] = useState<"export" | "restore" | null>(null);
+  const [companion, setCompanion] = useState<CompanionSession | null>(null);
+  const [showCompanion, setShowCompanion] = useState(false);
+  const [useSemantic, setUseSemantic] = useState(false);
+  const currentItems = useRef(items); currentItems.current = items;
+  const searchRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => searchRequest.current?.abort(), []);
+  useEffect(() => {
+    searchRequest.current?.abort();
+    if (!companion) { setUseSemantic(false); return; }
+    const timer = window.setTimeout(() => { setCompanion(null); setUseSemantic(false); }, Math.max(0, companion.expiresAt - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [companion]);
 
   async function reload() {
     setLoading(true);
@@ -310,6 +311,7 @@ function Gallery({
     if (!isLocal) return;
 
     const unsubscribe = subscribeToLocalProofChanges((kind) => {
+      searchRequest.current?.abort();
       releaseLocalProofImageUrls();
       setSearchResults(null);
       setSemanticDegraded(false);
@@ -371,14 +373,19 @@ function Gallery({
     setBusy(true);
     setError(null);
     setNotice(null);
+    const controller = new AbortController(); searchRequest.current = controller;
+    const snapshot = items;
     try {
-      const result = isLocal
+      const result = isLocal && companion?.semantic && useSemantic && filtered.length
+        ? { items: await semanticCompanionSearch(companion, query, filtered, controller.signal), semanticDegraded: false }
+        : isLocal
         ? await searchLocalProofItems(query, filters)
         : await searchProofItems(query, filters);
+      if (controller.signal.aborted || currentItems.current !== snapshot) return;
       setSearchResults(result.items);
       setSemanticDegraded(result.semanticDegraded);
     } catch (searchError) {
-      setError(searchError instanceof Error ? searchError.message : "Search failed");
+      if (!controller.signal.aborted) setError(searchError instanceof Error ? searchError.message : "Search failed");
     } finally {
       setBusy(false);
     }
@@ -459,60 +466,6 @@ function Gallery({
     }
   }
 
-  async function backUpLocalData() {
-    setBusy(true);
-    setError(null);
-    try {
-      downloadBackup(await exportLocalProofBackup());
-      setNotice(
-        "Unencrypted backup prepared for download. Store it somewhere private, such as a local folder, private Drive, or private Dropbox.",
-      );
-    } catch (backupError) {
-      setError(
-        backupError instanceof Error
-          ? backupError.message
-          : "Local backup could not be created",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function restoreLocalData(event: ChangeEvent<HTMLInputElement>) {
-    const backup = event.target.files?.[0] ?? null;
-    event.target.value = "";
-    if (!backup) return;
-    if (
-      !window.confirm(
-        "Import this Proof Gallery backup? Nothing will be written unless the entire file passes validation.",
-      )
-    ) {
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await importLocalProofBackup(backup);
-      const persistence = await requestLocalProofPersistence();
-      setSearchResults(null);
-      setNotice(
-        persistence
-          ? `${result.imported} Proof ${result.imported === 1 ? "item" : "items"} restored locally. Keep the backup somewhere private for recovery.`
-          : `${result.imported} Proof ${result.imported === 1 ? "item" : "items"} restored locally, but browser persistence is not guaranteed. Keep the backup somewhere private.`,
-      );
-      await reload();
-    } catch (restoreError) {
-      setError(
-        restoreError instanceof Error
-          ? restoreError.message
-          : "The local backup could not be imported",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function clearLocalData() {
     const imageCount = items.filter((item) => item.imagePath).length;
     if (
@@ -565,31 +518,23 @@ function Gallery({
           {isLocal ? (
             <>
               <button className="secondary-button" disabled={busy} onClick={() => setShowMediaInbox(true)}>Photos & media</button>
+              <button className="secondary-button" disabled={busy} onClick={() => setShowCompanion(value => !value)}>Connect this Mac</button>
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => void backUpLocalData()}
-                disabled={busy}
+                onClick={() => { setShowMediaInbox(false); setBackupMode("export"); }}
+                disabled={busy || mediaDirty}
               >
                 Back up
               </button>
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => importInput.current?.click()}
-                disabled={busy}
+                onClick={() => { setShowMediaInbox(false); setBackupMode("restore"); }}
+                disabled={busy || mediaDirty}
               >
                 Restore
               </button>
-              <input
-                ref={importInput}
-                className="visually-hidden"
-              type="file"
-              accept="application/json,.json"
-              aria-label="Restore Proof Gallery backup"
-              onChange={(event) => void restoreLocalData(event)}
-                tabIndex={-1}
-              />
               <button
                 className="danger-button"
                 type="button"
@@ -636,15 +581,17 @@ function Gallery({
           <strong>Local to this browser profile.</strong>
           <span>
             Not synced or encrypted by Proof Gallery. Clearing site data, using
-            private browsing, or losing this profile can erase it. Backups are
-            portable plaintext—keep them somewhere private.
+            private browsing, or losing this profile can erase it. Download an
+            encrypted backup to protect saved Proof, pending media, and saved notes.
           </span>
         </section>
       )}
 
+      {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { clearSearch(); await reload(); }} />}
+      {isLocal && showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); }} />}
       {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
 
-      {storySeed && <ProofStory key={storySeed.id} seed={storySeed} savedProof={items} onClose={() => setStorySeedId(null)} />}
+      {storySeed && <ProofStory key={storySeed.id} seed={storySeed} savedProof={items} companion={companion} onClose={() => setStorySeedId(null)} />}
 
       <section className="search-panel" aria-labelledby="search-title">
         <div>
@@ -653,6 +600,7 @@ function Gallery({
             Search is user-initiated and restricted to this {isLocal ? "local Proof" : "private"} collection.
           </p>
         </div>
+        {isLocal && companion?.semantic && <label className="checkbox-row"><input type="checkbox" checked={useSemantic} disabled={busy} onChange={event => setUseSemantic(event.target.checked)} />Match by meaning on this Mac. Sends only filtered saved Proof text to the paired companion when you search.</label>}
         <form className="search-form" onSubmit={runSearch}>
           <input
             type="search"
@@ -683,8 +631,7 @@ function Gallery({
         </form>
         {searchResults && isLocal && (
           <p className="search-receipt">
-            Showing deterministic local lexical matches. No model or provider
-            was called.
+            {semanticDegraded ? "Showing deterministic local lexical matches. No model or provider was called." : "Showing on-device meaning matches from filtered saved Proof only. Similarity is not a judgment of worth or meaning."}
           </p>
         )}
         {semanticDegraded && !isLocal && (

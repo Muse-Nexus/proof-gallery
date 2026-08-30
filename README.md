@@ -91,10 +91,12 @@ Local mode needs no account and makes no evidence or search request to
 Supabase, an embedding service, Drive, or Dropbox. Items and image bytes stay in
 IndexedDB for that browser profile. Local mode is not account-authenticated,
 not encrypted by Proof Gallery, and not automatically synchronized. Back up
-regularly with the user-initiated versioned JSON export; the resulting plaintext
-file can be kept in a private local folder or placed in a private Google Drive
-or Dropbox folder by the user. Integrity receipts detect backup corruption but
-do not authenticate or encrypt the file.
+regularly with the user-initiated encrypted `.proof` backup, including pending
+media and saved review notes. Keep the passphrase separately; it is not recoverable.
+Older plaintext JSON backups remain importable. Files can be stored manually in
+a private local, Drive, or Dropbox folder. No cloud sync is implied.
+Optional [same-Mac pairing](docs/PRIVATE_COMPLETION.md) enables on-device meaning
+matching and full-note reading drafts; no external AI service receives evidence.
 
 For authenticated, multi-device storage, use the optional Supabase mode. It
 requires the [Supabase CLI](https://supabase.com/docs/guides/local-development)
@@ -108,7 +110,8 @@ optional embeddings, backups, and account deletion.
 ## Search modes
 
 Local mode uses deterministic lexical ranking over Proof items in the selected
-browser profile. It does not call a model or provider. Local and Supabase
+browser profile by default. Optional paired-Mac meaning search runs on-device
+after an explicit choice and uses only filtered saved Proof. Local and Supabase
 collections are separate: Proof Gallery does not silently sync, migrate,
 co-search, or merge them.
 
@@ -164,8 +167,8 @@ No image attached**. Exact visual asset receipts and the AI prompt are in
   administrators, and JavaScript executing on the same origin may be able to
   read it.
 - Clearing site data, browser eviction, private-browsing teardown, or profile
-  loss can erase local data. Export files are portable plaintext and must be
-  protected by the user.
+  loss can erase local data. Default full backups are encrypted; older JSON
+  backups and companion review files remain plaintext and must be protected.
 - A dedicated hostname is required for meaningful browser-storage isolation.
   GitHub Pages project paths share their parent origin and therefore share its
   browser-storage trust boundary.
@@ -230,7 +233,7 @@ No companion installation or external account is required for this path.
   added in bulk.
 - Details must be saved or discarded before bulk approval. Approval checks
   media integrity and atomically moves the selected items to saved Proof.
-- Pending items survive reload but **are excluded from backups and search**.
+- Pending items survive reload and enter **encrypted full backups, not Proof search**.
   Remove them from review separately; the original files are untouched.
 - For the web file picker, export Apple Photos selections as JPEG first;
   direct HEIC/HEIF and MOV imports are not supported. The optional Mac companion
@@ -240,10 +243,11 @@ No companion installation or external account is required for this path.
 - This is cross-platform file access, **not cross-device sync**. Each browser
   profile has its own collection. Use private backups for manual transfer.
 
-Local backup version 2 supports attachment-only Proof and clips. Version 1
-image/text backups still import. Archives retain the historical `image` field
-name for media and are capped at 64 MiB encoded / 48 MiB decoded media. Pending
-media is not included; keep original files until approved Proof is backed up.
+Encrypted full backups wrap a version-3 snapshot of saved and pending stores.
+Saved review drafts and original bytes are included; unsaved fields must be saved
+or discarded first. Version-1/2 plaintext backups remain readable. The full cap is
+144 MiB encoded, with 48 MiB saved media and 48 MiB pending media. Legacy saved-only
+exports retain the 64 MiB/48 MiB limit. See [backup contract](docs/PRIVATE_COMPLETION.md).
 The hosted Supabase mode remains raster-only with its existing validation,
 required evidence text, RLS, and private bucket. No database migration is needed.
 
@@ -275,7 +279,10 @@ You can choose up to six related saved moments to join it. The sequence keeps
 your exact notes and source labels, ordering known occurred dates first and
 marking unknown dates separately. It does not generate narrative prose, invent
 transitions, or save a new evidence item. Removing an item from saved Proof also
-removes it from the reading view. A generated story writer is not included.
+removes it from the reading view. An optional paired-Mac model can select up to
+three complete notes for a shorter source-backed reading. It selects IDs only;
+code preserves the full notes and their context. This is not invented narrative
+prose, a new evidence item, or a cloud-model request.
 
 ## Scope and direction
 

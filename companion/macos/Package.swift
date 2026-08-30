@@ -8,9 +8,12 @@ let package = Package(
     targets: [
         .target(name: "CompanionCore"),
         .target(name: "CompanionVision", dependencies: ["CompanionCore"]),
-        .executableTarget(name: "ProofPhotosCompanion", dependencies: ["CompanionCore", "CompanionVision"]),
+        .target(name: "CompanionIntelligence", dependencies: ["CompanionCore"]),
+        .executableTarget(name: "ProofPhotosCompanion", dependencies: ["CompanionCore", "CompanionVision", "CompanionIntelligence"]),
         .testTarget(name: "CompanionCoreTests", dependencies: ["CompanionCore"]),
         .testTarget(name: "CompanionVisionTests", dependencies: ["CompanionVision"]),
+        .testTarget(name: "CompanionIntelligenceTests", dependencies: ["CompanionIntelligence"]),
+        .testTarget(name: "CompanionBridgeTests", dependencies: ["ProofPhotosCompanion"]),
     ],
     swiftLanguageModes: [.v5]
 )

@@ -110,13 +110,13 @@ operator's account on push.
 
 ## Local backup and restore
 
-Use the gallery's explicit backup control to download a versioned JSON archive.
-It contains evidence text, metadata, and image bytes in **plaintext**. Protect
-the file like the originals. It may be saved locally or manually placed in a
-private Google Drive or Dropbox folder; that is user-managed file storage, not
-a connector or background sync. SHA-256 receipts cover each item and image to
-detect corruption, but they do not prove who created the file and provide no
-encryption.
+Use **Back up** to create a passphrase-encrypted `.proof` archive containing
+saved Proof, pending media, and saved review notes. The passphrase is not stored
+or recoverable. Older version-1/2 plaintext JSON files still restore. Manual
+Drive/Dropbox storage is not a connector or background sync. Encryption protects
+the downloaded file, not the active browser database; SHA receipts detect
+corruption rather than establishing source authorship. Exact formats, limits,
+conflicts, and recovery caveats: [private completion contract](PRIVATE_COMPLETION.md).
 
 Restore is also user-initiated and accepts a supported, validated archive. Test
 restore before depending on a backup. Browser persistence is best-effort and is

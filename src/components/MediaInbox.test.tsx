@@ -24,7 +24,7 @@ it("does not save imported media until explicit review and preserves a selected 
   const onSaved = vi.fn().mockResolvedValue(undefined);
   render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={onSaved} onClose={vi.fn()} />);
   await screen.findByText("Pending review · not saved Proof");
-  expect(screen.getByText(/Review items are not in search or backups/)).toBeInTheDocument();
+  expect(screen.getByText(/Review items are not in Proof search/)).toBeInTheDocument();
   const file = new File(["synthetic"], "synthetic.png", { type: "image/png" });
   fireEvent.change(screen.getByLabelText("Choose photos or clips"), { target: { files: [file] } });
   await waitFor(() => expect(stageLocalProofMedia).toHaveBeenCalledWith([file]));

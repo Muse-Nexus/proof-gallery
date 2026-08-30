@@ -17,3 +17,11 @@ choices and remain distinct from approval or AI interpretation. Connections use
 only the current owner's saved Proof and show shared words. The story view is
 an on-request reading sequence of selected exact notes/photos with dates and
 sources, not generated autobiography. Never infer feelings or missing details.
+
+The optional five-minute same-Mac pairing transfers prepared media only into
+pending review and offers on-device text matching. No cloud fallback, LAN
+listener, automatic retrieval, or model-based approval. The story model selects
+source IDs; code displays full original notes so negation/context cannot be
+clipped away. Disconnect/edit/delete cancels stale results. Default encrypted
+backups include pending media and saved draft notes, but do not encrypt the
+active browser database. Restore must remain atomic and fail on conflicts.

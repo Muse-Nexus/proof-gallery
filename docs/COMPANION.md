@@ -43,7 +43,8 @@ guaranteed across development rebuilds.
    with owner-only file permissions. Keep it somewhere private.
 5. In Proof Gallery choose **Photos & media → Import companion review**, not
    Restore. Review categories/details, then explicitly save selected items.
-6. Back up saved Proof separately. A companion file is not a gallery backup.
+6. Use the encrypted full backup for saved Proof, pending photos, and saved notes.
+   A companion review file is not a gallery backup.
 
 Prepared photos are memory-only until export. Closing the window or quitting
 pauses collection and asks before discarding an unexported batch. Clearing a
@@ -87,7 +88,8 @@ and enter the corrected quote yourself during gallery review.
 - Original resources must already be local by default. The separate iCloud
   option allows PhotoKit to fetch missing originals for one bounded batch.
   It is off on launch and reset on Pause, disconnect, export, and completion.
-  There is no added network client/server entitlement or direct HTTP client.
+  There is no network-client entitlement or direct HTTP client. A separate,
+  explicit same-Mac pairing uses a loopback-only server entitlement.
   Downloads are through Apple Photos, not a new account connector. No upload
   or cloud model is authorized by this option. Pause cancels the current resource
   request; already downloaded originals may remain in Apple's cache.
@@ -130,11 +132,20 @@ pending-only transaction. SHA-256 detects corruption, not authorship. A crafted
 file can claim a Photos source; it is not a provider-signed attestation. Nothing
 is fetched from URLs or written using filenames/paths from the file.
 
-Pending candidates remain excluded from search and saved backups. Approval
+Pending candidates remain excluded from search but are included in encrypted
+full backups. Approval
 preserves the companion receipt in saved provenance, which survives edits and
 backup/restore. There is no new database migration or hosted behavior change.
 
 ## Verification and distribution
+
+Optional **Connect to Gallery on this Mac** pauses Photos collection and starts
+a five-minute loopback session. Paste its code into the web gallery's **Connect
+this Mac** control. Receive one prepared batch directly into pending review;
+the file fallback remains available. The same session offers optional on-device
+text matching and source-ID selection for full-note readings. No cloud AI,
+face identification, remote Photos commands, or automatic approval is introduced.
+See [exact boundaries and release gates](PRIVATE_COMPLETION.md).
 
 Run the web `bun run check`, focused companion import tests, and native
 `swift test`/`bash build-app.sh`. Tests use synthetic media, not real libraries.

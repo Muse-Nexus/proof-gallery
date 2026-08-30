@@ -1,0 +1,31 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { BackupPanel } from "./BackupPanel";
+import { exportLocalProofFullBackup } from "../lib/local-proof-store";
+import { encryptProofBackup } from "../lib/encrypted-backup";
+vi.mock("../lib/local-proof-store", () => ({ exportLocalProofFullBackup: vi.fn().mockResolvedValue(new Blob(["synthetic"])), importLocalProofBackup: vi.fn(), requestLocalProofPersistence: vi.fn() }));
+vi.mock("../lib/encrypted-backup", () => ({ encryptProofBackup: vi.fn().mockResolvedValue(new Blob(["encrypted-synthetic"])), decryptProofBackup: vi.fn(), isEncryptedProofBackup: vi.fn() }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); });
+it("guards an already-open form when pending details become dirty", async () => {
+  const props = { mode: "export" as const, onClose: vi.fn(), onBusyChange: vi.fn(), onRestored: vi.fn() };
+  const { rerender } = render(<BackupPanel {...props} blocked={false} />);
+  fireEvent.change(screen.getByLabelText(/Passphrase \(/), { target: { value: "synthetic long password" } });
+  fireEvent.change(screen.getByLabelText("Repeat passphrase"), { target: { value: "synthetic long password" } });
+  rerender(<BackupPanel {...props} blocked />);
+  expect(screen.getByRole("button", { name: "Download encrypted backup" })).toBeDisabled();
+  fireEvent.submit(screen.getByRole("button", { name: "Download encrypted backup" }).closest("form")!);
+  expect(exportLocalProofFullBackup).not.toHaveBeenCalled();
+});
+it("uses the full snapshot and clears passphrase fields after export", async () => {
+  URL.createObjectURL = vi.fn(() => "blob:synthetic"); URL.revokeObjectURL = vi.fn();
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const onBusyChange = vi.fn();
+  render(<BackupPanel mode="export" blocked={false} onClose={vi.fn()} onBusyChange={onBusyChange} onRestored={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText(/Passphrase \(/), { target: { value: "synthetic long password" } });
+  fireEvent.change(screen.getByLabelText("Repeat passphrase"), { target: { value: "synthetic long password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Download encrypted backup" }));
+  await waitFor(() => expect(encryptProofBackup).toHaveBeenCalledOnce());
+  await screen.findByText(/Encrypted download prepared/);
+  expect(screen.getByLabelText(/Passphrase \(/)).toHaveValue("");
+  expect(onBusyChange).toHaveBeenLastCalledWith(false);
+});

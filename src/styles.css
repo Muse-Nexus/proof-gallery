@@ -1688,6 +1688,16 @@ textarea {
 .candidate-details input, .candidate-details select, .candidate-details textarea { width: 100%; min-width: 0; }
 .media-download { display: inline-block; font-size: .8rem; color: inherit; padding: .6rem; text-underline-offset: 3px; }
 .media-fallback, .review-empty { padding: 1.5rem 0; font-size: .95rem; }
+.backup-panel, .companion-panel { padding: 1.5rem; margin-block: 1.5rem; border: 1px solid #ded7cd; border-radius: 1.2rem; background: #fffaf2; }
+.backup-panel h2, .companion-panel h2 { font-size: 1.4rem; font-weight: 450; }
+.backup-panel form, .companion-panel form { max-width: 640px; }
+.backup-panel fieldset { border: 0; padding: 0; min-width: 0; }
+.backup-panel label, .companion-panel label { display: grid; gap: .5rem; margin-block: 1rem; }
+.backup-panel input, .companion-panel input { width: 100%; min-width: 0; }
+.backup-panel .gallery-actions, .story-tools { display: flex; flex-wrap: wrap; gap: .6rem; }
+.source-reading { padding: 1rem 1.5rem; margin-block: 1.5rem; border-left: 3px solid #cfa16b; background: #fffaf2; }
+.source-reading p { line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-reading h3 { font-weight: 450; }
 @media (max-width: 640px) {
   .media-inbox-header { flex-direction: column; }
   .review-batch-controls { display: grid; grid-template-columns: 1fr; }
