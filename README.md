@@ -3,7 +3,11 @@
 ### Mac Photos companion (local development build)
 
 The optional [Mac companion](docs/COMPANION.md) requests Photos permission only
-when you connect, then reads a chosen album or recent Favorites while open.
+when you connect, then reads Recent Photos, Favorites, or a chosen album/date
+range while open. Recent Photos needs no Favorites: default last 90 days,
+newest 50 maximum. Optional on-device text recognition and Photos metadata help
+you review/filter the batch; they never decide what matters or become quotes.
+OCR excerpts stay in native memory and are not included in the export.
 It prepares still photos locally, preserves source/date receipts, and exports
 a private review file. In the web gallery choose **Photos & media → Import
 companion review**. Candidates still need a category and explicit approval.

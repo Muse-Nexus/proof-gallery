@@ -3,10 +3,18 @@
 ## Optional Mac Photos companion
 
 The separate [Mac companion](COMPANION.md) can request a Photos grant and watch
-a user-selected album/recent Favorites scope only while active. Web permission
+a user-selected Recent Photos/Favorites/album date scope only while active. Web permission
 does not inherit that grant. Photos are exported to an owner-selected local
 review file, then explicitly imported into pending review. No automatic saved
 Proof, cloud upload, iCloud download, or localhost server is introduced.
+
+An off-by-default toggle permits on-device Apple Vision text recognition within
+that selected source. It operates on a bounded preview off the main thread;
+Pause cancels the request and generation checks discard late results. Excerpts
+are unverified native-memory review aids, not quotes or semantic judgments.
+They and metadata cue flags are omitted from the unchanged v1 export. Clear,
+remove, disconnect, or quitting removes the corresponding native cues. No GPS,
+caption, People label, or additional album membership lookup is performed.
 
 HEIC JPEG previews are labelled derivatives with original-resource digest/name
 receipts; original HEIC bytes remain in Photos. Original supported media may

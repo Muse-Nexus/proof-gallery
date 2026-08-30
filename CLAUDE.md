@@ -6,6 +6,9 @@ tasks or receipts. Reuse the permissioned source → private review → saved Pr
 boundary. Web file intake does not inherit native Photos permissions. The Mac
 companion is a separately permissioned, read-only, bounded source adapter; its
 review-file handoff is not cross-device sync and must never bypass approval.
+Recent Photos does not require Favorites. Optional on-device OCR and metadata
+are review cues only, held in native memory and excluded from v1 exports. Never
+turn machine-read text into an exact quote or infer love, identity, or worth.
 Never use real personal evidence as development data or public content.
 Keep capture note-first: optional local word suggestions must respect manual
 choices and remain distinct from approval or AI interpretation. Connections use

@@ -9,8 +9,8 @@ The direction is low-effort, permissioned discovery. Do not turn the temporary
 manual MVP boundary into the permanent product purpose. Equally, do not claim a
 connector, background collector, native companion, or AI interpretation exists
 until it actually works. The web intake is selected local media and explicit
-companion review files. The Mac companion reads a chosen album or recent
-Favorites while open, with a separate owner-triggered Photos permission flow.
+companion review files. The Mac companion reads Recent Photos, Favorites, or a
+chosen album/date range while open, with a separate owner-triggered Photos permission flow.
 It exports private candidate files, not saved-Proof backups or automatic sync.
 
 - Keep source selection, pending review, approved Proof, and retrieval distinct.
@@ -23,6 +23,11 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
   Request Photos authorization only after Connect; read media only after the
   user chooses a bounded source and starts it. Pause/Disconnect must cancel
   active reads and observers. Closing/quitting must guard unexported candidates.
+- Optional Vision OCR is on-device, off the UI thread, bounded, cancellable, and
+  unverified. Keep it and metadata cues in native memory only; the v1 export
+  must not gain machine-read quotes, inferred categories, identity, or meaning.
+  No OCR result is not negative evidence. Public PhotoKit captions/People labels
+  are unavailable here; never invent them or read the Photos database privately.
 - Keep candidates private and out of search until explicit review. Never bypass
   approval, even if another agent or mode is autonomous.
 - Preserve original media, literal words, sources, and known dates. Do not infer

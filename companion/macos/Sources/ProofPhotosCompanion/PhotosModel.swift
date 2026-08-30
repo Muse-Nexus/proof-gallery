@@ -3,6 +3,7 @@ import Photos
 import ImageIO
 import UniformTypeIdentifiers
 import CompanionCore
+import CompanionVision
 
 struct PhotoAlbum: Identifiable { let id: String; let title: String }
 
@@ -46,19 +47,26 @@ private final class ResourceRead: @unchecked Sendable {
     @Published var source = ""
     @Published var since = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
     @Published var photos: [ReviewPhoto] = []
+    @Published var contexts: [String: LocalPhotoContext] = [:]
+    @Published var readTextLocally = false
     @Published var message = "Connect only when you are ready to choose a photo source."
     @Published var skipped = 0
+    @Published var skipReasons: [String: Int] = [:]
     @Published var exported = false
     private var generation = 0
     private var seen = Set<String>()
     private var task: Task<Void, Never>?
     private var activeRead: ResourceRead?
+    private var activeTextRead: LocalTextRead?
     private var scanAgain = false
     private var observing = false
     private var lastScopeKey: String?
 
     var sourceLocked: Bool { active || scanning || !photos.isEmpty }
     var preparedBytes: Int { photos.reduce(0) { $0 + $1.byteCount } }
+    var skipSummary: String {
+        skipReasons.keys.sorted().map { "\(skipReasons[$0] ?? 0) \($0)" }.joined(separator: " · ")
+    }
 
     func connect() {
         guard !connecting, !connected else { return }
@@ -90,7 +98,7 @@ private final class ResourceRead: @unchecked Sendable {
 
     func start() {
         guard connected, !source.isEmpty, !active, !scanning else { return }
-        let scopeKey = source + "|" + dayLabel(since)
+        let scopeKey = source + "|" + dayLabel(since) + "|text:\(readTextLocally)"
         if lastScopeKey != scopeKey { seen = []; lastScopeKey = scopeKey }
         if !observing { PHPhotoLibrary.shared().register(self); observing = true }
         active = true; message = "Watching only the selected source while this app is open."
@@ -101,22 +109,23 @@ private final class ResourceRead: @unchecked Sendable {
         if observing { PHPhotoLibrary.shared().unregisterChangeObserver(self); observing = false }
         active = false; generation += 1; scanAgain = false
         activeRead?.cancel(); activeRead = nil; task?.cancel(); task = nil; scanning = false
+        activeTextRead?.cancel(); activeTextRead = nil
         message = "Paused. Prepared photos remain in memory until you export or clear them."
     }
 
     func disconnect() {
         pause()
-        connected = false; source = ""; albums = []; photos = []; seen = []; lastScopeKey = nil; exported = false; skipped = 0
+        connected = false; source = ""; albums = []; photos = []; contexts = [:]; seen = []; lastScopeKey = nil; exported = false; skipped = 0; skipReasons = [:]
         message = "Disconnected and in-memory photos cleared. Revoke the OS grant in System Settings → Privacy & Security → Photos. Exported files and saved Proof are unchanged."
     }
 
     func clearPrepared() {
-        pause(); photos = []; exported = false; skipped = 0
+        pause(); photos = []; contexts = [:]; exported = false; skipped = 0; skipReasons = [:]
         message = "Prepared photos cleared. This session remembers photos already gathered from the same source. The scan is the most recent 50, not a full-library import."
     }
 
     func removePrepared(_ id: String) {
-        pause(); photos.removeAll { $0.id == id }; exported = false
+        pause(); photos.removeAll { $0.id == id }; contexts.removeValue(forKey: id); exported = false
         message = "Removed from this batch only. Original Photos and exported files are unchanged."
     }
 
@@ -135,20 +144,23 @@ private final class ResourceRead: @unchecked Sendable {
             return
         }
         let selectedSource = source
+        let shouldReadText = readTextLocally
         let earliest = Calendar.current.startOfDay(for: since)
         let options = PHFetchOptions()
         options.fetchLimit = ReviewLimits.photoCount
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.includeHiddenAssets = false; options.includeAllBurstAssets = false
         options.includeAssetSourceTypes = .typeUserLibrary
-        var predicates = [NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue), NSPredicate(format: "creationDate >= %@", earliest as NSDate)]
+        var predicates = [NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue),
+                          NSPredicate(format: "creationDate >= %@", earliest as NSDate),
+                          NSPredicate(format: "creationDate <= %@", Date() as NSDate)]
         let assets: PHFetchResult<PHAsset>
         let scope: String
-        if selectedSource == "favorites" {
-            predicates.append(NSPredicate(format: "favorite == YES"))
+        if selectedSource == "favorites" || selectedSource == "recent" {
+            if selectedSource == "favorites" { predicates.append(NSPredicate(format: "favorite == YES")) }
             options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
             assets = PHAsset.fetchAssets(with: options)
-            scope = "Favorites since \(dayLabel(earliest))"
+            scope = "\(selectedSource == "recent" ? "Recent photos" : "Favorites") since \(dayLabel(earliest))"
         } else {
             guard let album = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [selectedSource], options: nil).firstObject else {
                 pause(); message = "The selected album is no longer available. Clear this batch to choose another source."; return
@@ -158,12 +170,14 @@ private final class ResourceRead: @unchecked Sendable {
             scope = "Album \(String((album.localizedTitle ?? "Untitled").prefix(100))) since \(dayLabel(earliest))"
         }
         let batch = (0..<assets.count).map { assets.object(at: $0) }.filter { !seen.contains($0.localIdentifier) }
-        scanning = true; skipped = 0; scanAgain = false
+        scanning = true; skipped = 0; skipReasons = [:]; scanAgain = false
         let scanGeneration = generation
         task = Task { [weak self] in
             guard let self else { return }
             for asset in batch {
                 guard !Task.isCancelled, self.active, self.generation == scanGeneration else { return }
+                let readPermission = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                guard readPermission == .authorized || readPermission == .limited else { self.disconnect(); return }
                 if self.photos.count >= ReviewLimits.photoCount { self.pause(); self.message = "Review is full. Export and clear this batch before starting again."; return }
                 do {
                     guard let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == .photo }) else { throw ReviewError.invalidPhoto }
@@ -179,18 +193,60 @@ private final class ResourceRead: @unchecked Sendable {
                     guard self.preparedBytes + photo.byteCount <= ReviewLimits.packageBytes else {
                         self.pause(); self.message = "Review reached its 47 MiB limit. Export and clear this batch first."; return
                     }
+                    var recognizedText = ""
+                    var textStatus: LocalPhotoContext.TextStatus = .off
+                    if shouldReadText {
+                        self.message = "Reading text on this Mac · \(self.photos.count + 1) of up to \(batch.count). Nothing uploaded or saved as Proof."
+                        let textRead = LocalTextRead(); self.activeTextRead = textRead
+                        do {
+                            recognizedText = try await textRead.read(rendition.data)
+                            textStatus = recognizedText.isEmpty ? .notFound : .found
+                        } catch { textStatus = .unavailable }
+                        // Best-effort Vision cancellation alone is not a write gate.
+                        guard !Task.isCancelled, self.active, self.generation == scanGeneration else { return }
+                        self.activeTextRead = nil
+                        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                        guard currentStatus == .authorized || currentStatus == .limited else { self.disconnect(); return }
+                    }
                     self.seen.insert(asset.localIdentifier)
-                    if !self.photos.contains(where: { $0.sha256 == photo.sha256 }) { self.photos.append(photo); self.exported = false }
+                    if !self.photos.contains(where: { $0.sha256 == photo.sha256 }) {
+                        self.contexts[photo.id] = LocalPhotoContext(pixelWidth: asset.pixelWidth, pixelHeight: asset.pixelHeight,
+                            isScreenshot: asset.mediaSubtypes.contains(.photoScreenshot),
+                            isLivePhoto: asset.mediaSubtypes.contains(.photoLive), isFavorite: asset.isFavorite,
+                            textStatus: textStatus, recognizedText: recognizedText)
+                        self.photos.append(photo); self.exported = false
+                    }
                 } catch {
                     guard self.generation == scanGeneration, self.active, !Task.isCancelled else { return }
                     self.skipped += 1
+                    self.skipReasons[self.skipReason(error), default: 0] += 1
                 }
             }
             guard self.generation == scanGeneration else { return }
-            self.scanning = false; self.activeRead = nil; self.task = nil
-            self.message = "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan (cloud-only, unsupported, or too large). Nothing saved as Proof."
+            self.scanning = false; self.activeRead = nil; self.activeTextRead = nil; self.task = nil
+            self.message = "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan. Nothing saved as Proof."
             if self.scanAgain { self.scan() }
         }
+    }
+
+    private func skipReason(_ error: Error) -> String {
+        if let error = error as? ReviewError {
+            switch error {
+            case .photoTooLarge: return "over 10 MiB"
+            case .invalidSource: return "unsupported source metadata"
+            default: return "unsupported or unavailable image"
+            }
+        }
+        let error = error as NSError
+        guard error.domain == PHPhotosErrorDomain else { return "local read failed" }
+        switch error.code {
+        case PHPhotosError.Code.networkAccessRequired.rawValue: return "require an iCloud download (not allowed)"
+        case PHPhotosError.Code.accessUserDenied.rawValue, PHPhotosError.Code.accessRestricted.rawValue: return "Photos access denied or restricted"
+        case PHPhotosError.Code.libraryVolumeOffline.rawValue: return "library volume offline"
+        case PHPhotosError.Code.missingResource.rawValue: return "original resource missing"
+        default: return "Photos read failed (code \(error.code))"
+        }
+        // Never display error.userInfo/description: these may contain private paths or identifiers.
     }
 
     private func read(_ resource: PHAssetResource) async throws -> Data {
