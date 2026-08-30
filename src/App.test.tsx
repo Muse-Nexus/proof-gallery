@@ -82,7 +82,7 @@ describe("standalone local storage boundary", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Keep the receipts your brain misplaces.",
+        name: "Evidence that you matter.",
       }),
     ).toBeInTheDocument();
     expect(
@@ -180,7 +180,7 @@ describe("standalone local storage boundary", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Keep the receipts your brain misplaces.",
+        name: "Evidence that you matter.",
       }),
     ).toBeInTheDocument();
     expect(window.localStorage.getItem("proof-gallery-storage-mode")).toBe(

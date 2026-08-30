@@ -1642,6 +1642,34 @@ textarea {
   }
 }
 
+.gallery-purpose { max-width: 48ch; color: var(--text); }
+.media-inbox { margin: 1.5rem 0; padding: clamp(1rem, 3vw, 2rem); background: #f5f2eb; border: 1px solid #d6cbbd; border-radius: 1.4rem; }
+.media-inbox-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.media-inbox h2 { margin: .4rem 0; font-size: 1.8rem; font-weight: 500; letter-spacing: -.025em; }
+.media-inbox-header p { max-width: 60ch; margin: .5rem 0 1rem; }
+.media-intake-actions { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
+.media-guidance { color: #62594f; font-size: .85rem; line-height: 1.6; max-width: 90ch; }
+.review-batch-controls { display: flex; flex-wrap: wrap; align-items: end; gap: .8rem; border-block: 1px solid #d6cbbd; padding: 1rem 0; margin: 1.5rem 0; }
+.review-batch-controls label { min-width: 0; }
+.review-batch-controls .checkbox-row { align-self: center; }
+.review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 1.2rem; }
+.review-card { padding: 1rem; border: 1px solid #ded7cd; border-radius: 1rem; background: #fffdf8; overflow: hidden; min-width: 0; }
+.review-card .proof-image { width: 100%; height: 240px; object-fit: contain; background: #e9e4dd; margin-top: .8rem; border-radius: .5rem; }
+.review-card .checkbox-row { overflow-wrap: anywhere; align-items: flex-start; }
+.review-state { font-size: .75rem; letter-spacing: .025em; color: #655147; }
+.review-source { font-size: .8rem; overflow-wrap: anywhere; }
+.candidate-details { border-top: 1px solid #ded7cd; margin-top: .8rem; padding-top: .8rem; }
+.candidate-details summary { cursor: pointer; font-weight: 500; }
+.candidate-details fieldset { border: 0; padding: 1rem 0 0; display: grid; gap: .8rem; min-width: 0; }
+.candidate-details input, .candidate-details select, .candidate-details textarea { width: 100%; min-width: 0; }
+.media-download { display: inline-block; font-size: .8rem; color: inherit; padding: .6rem; text-underline-offset: 3px; }
+.media-fallback, .review-empty { padding: 1.5rem 0; font-size: .95rem; }
+@media (max-width: 640px) {
+  .media-inbox-header { flex-direction: column; }
+  .review-batch-controls { display: grid; grid-template-columns: 1fr; }
+  .media-intake-actions > button { flex: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

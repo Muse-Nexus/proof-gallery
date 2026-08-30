@@ -17,9 +17,11 @@ Thank you for helping make Proof Gallery safer and more useful.
 Never commit or paste real evidence, photos, credentials, `.env` files, signed
 URLs, provider responses, production identifiers, or database dumps.
 
-Changes that introduce automatic collection, public sharing, distress-triggered
-surfacing, diagnosis, worth scoring, invented meaning, or mandatory model
-orchestration are outside the standalone MVP.
+Read AGENTS.md for the purpose and evidence-handling contract. Permissioned
+discovery is the product direction; the implemented source path is local
+selected-media review, not background account/library scanning. Public sharing,
+distress-triggered surfacing, diagnosis, worth scoring, invented meaning, and
+mandatory model orchestration are outside the product.
 
 Do not attach a real exported backup to an issue or pull request. Local backups
 are plaintext and may contain original image bytes and EXIF metadata.

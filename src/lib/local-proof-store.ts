@@ -5,20 +5,22 @@ import {
   isProofSourceType,
   normalizeTags,
   sortProofItems,
-  validateProofImage,
   type ProofFilters,
   type ProofItem,
   type ProofItemInput,
+  type ProofCategory,
 } from "./proof";
+import { LOCAL_MEDIA_TYPES, validateLocalProofMedia } from "./media";
 import type { ProofSearchResult } from "./proof-api";
 
 export const LOCAL_PROOF_OWNER_ID = "local-browser-owner";
 
 const DATABASE_NAME = "muse-nexus-proof-gallery-local";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 const ITEM_STORE = "proof_items";
+const CANDIDATE_STORE = "proof_candidates";
 const BACKUP_FORMAT = "muse-nexus-proof-gallery-backup";
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 const MAX_BACKUP_IMAGE_BYTES = 48 * 1024 * 1024;
@@ -27,12 +29,7 @@ const MAX_EDITABLE_TIMESTAMP_MS = Date.parse("9999-12-31T23:59:59.999Z");
 const CHANGE_CHANNEL_NAME = "muse-nexus-proof-gallery-local-changes-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const SAFE_IMAGE_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
+const SAFE_IMAGE_TYPES = LOCAL_MEDIA_TYPES;
 
 type LocalProofRecord = {
   id: string;
@@ -93,6 +90,24 @@ export type LocalProofImportResult = {
   imported: number;
   importedCount: number;
   items: ProofItem[];
+};
+
+export type CandidateInput = Omit<ProofItemInput, "category"> & { category: ProofCategory | null };
+type CandidateRecord = {
+  id: string;
+  revision: string;
+  userId: typeof LOCAL_PROOF_OWNER_ID;
+  visibility: typeof PROOF_VISIBILITY;
+  importedAt: string;
+  fileName: string;
+  blob: Blob;
+  digest: string;
+  input: CandidateInput;
+};
+export type LocalProofCandidate = Omit<CandidateRecord, "blob" | "digest"> & {
+  mediaUrl: string | null;
+  mediaType: string;
+  size: number;
 };
 
 const objectUrlCache = new Map<
@@ -181,6 +196,9 @@ function openDatabase(): Promise<IDBDatabase> {
       const database = request.result;
       if (!database.objectStoreNames.contains(ITEM_STORE)) {
         database.createObjectStore(ITEM_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains(CANDIDATE_STORE)) {
+        database.createObjectStore(CANDIDATE_STORE, { keyPath: "id" });
       }
     };
     request.onerror = () => {
@@ -424,7 +442,7 @@ function provenance(value: unknown): Record<string, unknown> {
   return value;
 }
 
-function canonicalInput(input: ProofItemInput): Omit<
+function canonicalInput(input: ProofItemInput, hasAttachment = false): Omit<
   LocalProofRecord,
   | "id"
   | "userId"
@@ -436,7 +454,7 @@ function canonicalInput(input: ProofItemInput): Omit<
   | "imageDigest"
 > {
   const title = cleanedRequiredString(input.title, "Title", 200);
-  const evidenceText = cleanedRequiredString(
+  const evidenceText = hasAttachment && typeof input.evidenceText === "string" && !input.evidenceText.trim() ? "" : cleanedRequiredString(
     input.evidenceText,
     "Evidence",
     20_000,
@@ -587,7 +605,7 @@ function validateStoredRecord(value: unknown): LocalProofRecord {
     id,
     userId: LOCAL_PROOF_OWNER_ID,
     title: requiredString(value.title, "Title", 200),
-    evidenceText: requiredString(value.evidenceText, "Evidence", 20_000),
+    evidenceText: imageBlob && value.evidenceText === "" ? "" : requiredString(value.evidenceText, "Evidence", 20_000),
     occurredOn: occurredDate(value.occurredOn),
     category: value.category,
     sourceType: value.sourceType,
@@ -615,7 +633,7 @@ function revokeImageUrl(id: string): void {
   objectUrlCache.delete(id);
 }
 
-function imageUrl(record: LocalProofRecord): string | null {
+function imageUrl(record: Pick<LocalProofRecord, "id" | "imageBlob" | "imageRevision">): string | null {
   if (!record.imageBlob || !record.imageRevision) {
     revokeImageUrl(record.id);
     return null;
@@ -649,6 +667,7 @@ function mapRecord(recordValue: unknown, relevance: number | null = null): Proof
         ? null
         : `local-proof://${record.id}/${record.imageRevision}`,
     imageUrl: imageUrl(record),
+    mediaType: record.imageBlob?.type,
     provenance: record.provenance,
     visibility: PROOF_VISIBILITY,
     createdAt: record.createdAt,
@@ -739,6 +758,8 @@ async function checkedUpdate(
         const replaceImage = image !== null;
         nextRecord = {
           ...next,
+          provenance: { ...current.provenance, ...next.provenance,
+            ...(current.provenance.import_receipt ? { import_receipt: current.provenance.import_receipt } : {}) },
           id: current.id,
           userId: LOCAL_PROOF_OWNER_ID,
           createdAt: current.createdAt,
@@ -854,9 +875,9 @@ export async function createLocalProofItem(
   input: ProofItemInput,
   image: File | null,
 ): Promise<{ item: ProofItem; semanticReady: boolean }> {
-  const fields = canonicalInput(input);
+  const fields = canonicalInput(input, Boolean(image));
   if (image) {
-    await validateProofImage(image);
+    await validateLocalProofMedia(image);
     requiredString(image.name, "Proof image name", 1_024);
   }
   const imageBlob = image ? image.slice(0, image.size, image.type) : null;
@@ -894,9 +915,9 @@ export async function updateLocalProofItem(
   ) {
     throw new Error("Local Proof storage refused an item for another owner");
   }
-  const fields = canonicalInput(input);
+  const fields = canonicalInput(input, Boolean(image || (existing.imagePath && !removeExistingImage)));
   if (image) {
-    await validateProofImage(image);
+    await validateLocalProofMedia(image);
     requiredString(image.name, "Proof image name", 1_024);
   }
   const imageDigest = image ? await sha256(image) : null;
@@ -963,6 +984,10 @@ const SEARCH_STOP_WORDS = new Set([
 ]);
 
 const SEARCH_TERM_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  loved: ["loved", "love", "loving"],
+  care: ["care", "cared", "caring", "kindness"],
+  belonging: ["belonging", "together", "included", "chosen"],
+  accomplished: ["accomplished", "completed", "finished", "shipped"],
   ended: ["end", "recovered", "recovery"],
   failing: ["fail", "failed", "failure"],
   finished: ["finish", "complete", "completed", "done", "shipped"],
@@ -1345,7 +1370,7 @@ function validateBackupItem(value: unknown): ValidatedBackupItem {
   const record = {
     id: uuid(value.id, "Proof id"),
     title: requiredString(value.title, "Title", 200),
-    evidenceText: requiredString(value.evidenceText, "Evidence", 20_000),
+    evidenceText: value.image !== null && value.evidenceText === "" ? "" : requiredString(value.evidenceText, "Evidence", 20_000),
     occurredOn: occurredDate(value.occurredOn),
     category: value.category,
     sourceType: value.sourceType,
@@ -1392,7 +1417,7 @@ async function importedRecord(
     bytes.byteOffset + bytes.byteLength,
   ) as ArrayBuffer;
   const file = new File([imageBuffer], image.name, { type: image.type });
-  await validateProofImage(file);
+  await validateLocalProofMedia(file);
   const actualDigest = await sha256(file);
   if (actualDigest !== image.integritySha256) {
     throw new Error(
@@ -1425,7 +1450,7 @@ async function parseBackup(blob: Blob): Promise<LocalProofRecord[]> {
     ["format", "version", "encryption", "exportedAt", "items"],
     "Proof backup",
   );
-  if (value.format !== BACKUP_FORMAT || value.version !== BACKUP_VERSION) {
+  if (value.format !== BACKUP_FORMAT || (value.version !== 1 && value.version !== BACKUP_VERSION)) {
     throw new Error("Proof backup format or version is unsupported");
   }
   if (value.encryption !== "none") {
@@ -1441,6 +1466,9 @@ async function parseBackup(blob: Blob): Promise<LocalProofRecord[]> {
   let decodedImageBytes = 0;
   for (const item of value.items) {
     const validated = validateBackupItem(item);
+    if (value.version === 1 && (!validated.record.evidenceText || validated.body.image?.type.startsWith("video/"))) {
+      throw new Error("Legacy version 1 backups do not support empty notes or video");
+    }
     if (ids.has(validated.record.id)) {
       throw new Error("Proof backup contains duplicate ids");
     }
@@ -1583,10 +1611,196 @@ export async function importLocalProofBackup(
 export async function clearLocalProofItems(): Promise<void> {
   const database = await openDatabase();
   const transaction = database.transaction(ITEM_STORE, "readwrite");
+  const idsPromise = requestResult(transaction.objectStore(ITEM_STORE).getAllKeys());
   const clearPromise = requestResult(transaction.objectStore(ITEM_STORE).clear());
-  await Promise.all([clearPromise, transactionComplete(transaction)]);
-  releaseLocalProofImageUrls();
+  const [ids] = await Promise.all([idsPromise, clearPromise, transactionComplete(transaction)]);
+  for (const id of ids) revokeImageUrl(String(id));
   publishLocalProofChange("clear");
+}
+
+function candidateInput(input: CandidateInput): CandidateInput {
+  const canonical = canonicalInput({ ...input, category: input.category ?? "belonging" }, true);
+  return {
+    title: canonical.title, evidenceText: canonical.evidenceText,
+    occurredOn: canonical.occurredOn, category: input.category === null ? null : canonical.category,
+    sourceType: canonical.sourceType, source: canonical.source, tags: canonical.tags,
+    person: canonical.person, project: canonical.project,
+  };
+}
+
+function validateCandidate(value: unknown): CandidateRecord {
+  if (!isPlainObject(value)) throw new Error("Invalid local review item");
+  assertExactKeys(value, ["id", "revision", "userId", "visibility", "importedAt", "fileName", "blob", "digest", "input"], "Review item");
+  if (value.userId !== LOCAL_PROOF_OWNER_ID || value.visibility !== PROOF_VISIBILITY) {
+    throw new Error("Review item belongs to a different owner or visibility");
+  }
+  if (!isPlainObject(value.input)) throw new Error("Invalid review details");
+  const digest = requiredString(value.digest, "Media digest", 64);
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error("Invalid media digest");
+  return {
+    id: uuid(value.id, "Review id"), revision: uuid(value.revision, "Review revision"),
+    userId: LOCAL_PROOF_OWNER_ID, visibility: PROOF_VISIBILITY,
+    importedAt: isoTimestamp(value.importedAt, "Import time"),
+    fileName: requiredString(value.fileName, "Original filename", 1024),
+    blob: assertBlob(value.blob, "Review media"), digest,
+    input: candidateInput(value.input as CandidateInput),
+  };
+}
+
+function mapCandidate(candidate: CandidateRecord): LocalProofCandidate {
+  const { blob, digest: _digest, ...rest } = candidate;
+  return { ...rest, mediaType: blob.type, size: blob.size,
+    mediaUrl: imageUrl({ id: candidate.id, imageBlob: blob, imageRevision: candidate.revision }) };
+}
+
+export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]> {
+  const db = await openDatabase();
+  const tx = db.transaction(CANDIDATE_STORE, "readonly");
+  const [rows] = await Promise.all([requestResult(tx.objectStore(CANDIDATE_STORE).getAll()), transactionComplete(tx)]);
+  return rows.map(validateCandidate).sort((a, b) => b.importedAt.localeCompare(a.importedAt)).map(mapCandidate);
+}
+
+/** Recovery path also works when a pending row cannot be decoded. */
+export async function clearLocalProofCandidates(): Promise<void> {
+  const db = await openDatabase();
+  const tx = db.transaction(CANDIDATE_STORE, "readwrite");
+  const idsRequest = requestResult(tx.objectStore(CANDIDATE_STORE).getAllKeys());
+  const clearRequest = requestResult(tx.objectStore(CANDIDATE_STORE).clear());
+  const [ids] = await Promise.all([idsRequest, clearRequest, transactionComplete(tx)]);
+  for (const id of ids) revokeImageUrl(String(id));
+  publishLocalProofChange("change");
+}
+
+/** Selection authorizes local staging only. Nothing here enters Proof or search. */
+export async function stageLocalProofMedia(files: readonly File[]): Promise<{
+  added: number; duplicates: number; rejected: { name: string; reason: string }[];
+}> {
+  if (files.length > 50 || files.reduce((sum, file) => sum + file.size, 0) > MAX_BACKUP_IMAGE_BYTES) {
+    throw new Error("Choose up to 50 files and 48 MiB per batch. Nothing from this batch was imported.");
+  }
+  const prepared: CandidateRecord[] = [];
+  const rejected: { name: string; reason: string }[] = [];
+  for (const file of files) {
+    try {
+      await validateLocalProofMedia(file);
+      const name = requiredString(file.name, "Original filename", 1024);
+      const blob = file.slice(0, file.size, file.type);
+      prepared.push({
+        id: crypto.randomUUID(), revision: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
+        visibility: PROOF_VISIBILITY, importedAt: new Date().toISOString(), fileName: name,
+        blob, digest: await sha256(blob), input: {
+          title: name.slice(0, 200), evidenceText: "", occurredOn: null, category: null,
+          sourceType: file.type.startsWith("image/") ? "photo" : "other",
+          source: `Selected file: ${name.slice(0, 480)}`, tags: [], person: null, project: null,
+        },
+      });
+    } catch (error) {
+      rejected.push({ name: file.name, reason: error instanceof Error ? error.message : "Unsupported file" });
+    }
+  }
+  const db = await openDatabase();
+  const result = await new Promise<{ added: number; duplicates: number }>((resolve, reject) => {
+    const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
+    const savedRequest = tx.objectStore(ITEM_STORE).getAll();
+    const pendingRequest = tx.objectStore(CANDIDATE_STORE).getAll();
+    let saved: LocalProofRecord[] | null = null;
+    let pending: CandidateRecord[] | null = null;
+    let added = 0;
+    let duplicates = 0;
+    let failure: unknown;
+    const insert = () => {
+      if (!saved || !pending) return;
+      try {
+        const seen = new Set([...saved.map(row => row.imageDigest), ...pending.map(row => row.digest)]);
+        let pendingBytes = pending.reduce((sum, row) => sum + row.blob.size, 0);
+        for (const candidate of prepared) {
+          if (seen.has(candidate.digest)) { duplicates++; continue; }
+          pendingBytes += candidate.blob.size;
+          if (pendingBytes > MAX_BACKUP_IMAGE_BYTES || pending.length + added >= 100) {
+            throw new Error("Review inbox is full (100 files or 48 MiB). Review or remove some items first. This batch was not imported.");
+          }
+          seen.add(candidate.digest);
+          tx.objectStore(CANDIDATE_STORE).add(candidate);
+          added++;
+        }
+      } catch (error) { failure = error; tx.abort(); }
+    };
+    savedRequest.onsuccess = () => { try { saved = savedRequest.result.map(validateStoredRecord); insert(); } catch (error) { failure = error; tx.abort(); } };
+    pendingRequest.onsuccess = () => { try { pending = pendingRequest.result.map(validateCandidate); insert(); } catch (error) { failure = error; tx.abort(); } };
+    tx.oncomplete = () => resolve({ added, duplicates });
+    tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Photo import failed"));
+  });
+  publishLocalProofChange("change");
+  return { ...result, rejected };
+}
+
+/** One atomic transaction prevents duplicate approval, stale edits, and half-saves. */
+export async function resolveLocalProofCandidates(
+  entries: readonly { candidate: LocalProofCandidate; input?: CandidateInput }[],
+  action: "approve" | "edit" | "skip",
+): Promise<void> {
+  if (!entries.length || entries.length > 100 || new Set(entries.map(e => e.candidate.id)).size !== entries.length) {
+    throw new Error("Choose distinct review items");
+  }
+  const db = await openDatabase();
+  const verifiedMedia = new Map<string, CandidateRecord>();
+  if (action === "approve") {
+    const read = db.transaction(CANDIDATE_STORE, "readonly");
+    const reads = entries.map(entry => requestResult(read.objectStore(CANDIDATE_STORE).get(entry.candidate.id)));
+    const [rows] = await Promise.all([Promise.all(reads), transactionComplete(read)]);
+    for (const row of rows) {
+      if (!row) throw new Error("This review item changed in another tab. Refresh the inbox.");
+      const candidate = validateCandidate(row);
+      await validateLocalProofMedia(new File([candidate.blob], candidate.fileName, { type: candidate.blob.type }));
+      if (await sha256(candidate.blob) !== candidate.digest) throw new Error("Review media failed its integrity check. Remove it from review and select the original file again.");
+      verifiedMedia.set(candidate.id, candidate);
+    }
+  }
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
+    let failure: unknown;
+    for (const entry of entries) {
+      const request = tx.objectStore(CANDIDATE_STORE).get(entry.candidate.id);
+      request.onsuccess = () => {
+        try {
+          if (!request.result) throw new Error("This review item changed in another tab. Refresh the inbox.");
+          const current = validateCandidate(request.result);
+          if (current.revision !== entry.candidate.revision || entry.candidate.userId !== LOCAL_PROOF_OWNER_ID || entry.candidate.visibility !== PROOF_VISIBILITY) {
+            throw new Error("This review item changed in another tab. Refresh the inbox.");
+          }
+          const input = candidateInput(entry.input ?? current.input);
+          if (action === "approve") {
+            if (!input.category) throw new Error("Choose a category for each selected item");
+            const verified = verifiedMedia.get(current.id);
+            if (!verified || verified.revision !== current.revision || verified.digest !== current.digest) {
+              throw new Error("This review item changed during validation. Refresh the inbox.");
+            }
+            const timestamp = new Date().toISOString();
+            const fields = canonicalInput({ ...input, category: input.category }, true);
+            const record: LocalProofRecord = { ...fields,
+              id: current.id, userId: LOCAL_PROOF_OWNER_ID, createdAt: timestamp, updatedAt: timestamp,
+              imageBlob: verified.blob, imageName: current.fileName, imageRevision: current.revision, imageDigest: verified.digest,
+              provenance: { ...fields.provenance, kind: "reviewed_media", import_receipt: {
+                method: "selected_files", original_filename: current.fileName,
+                mime_type: current.blob.type, sha256: current.digest, imported_at: current.importedAt,
+                approved_at: timestamp,
+              } },
+            };
+            tx.objectStore(ITEM_STORE).add(validateStoredRecord(record));
+          }
+          if (action === "edit") {
+            tx.objectStore(CANDIDATE_STORE).put({ ...current, input, revision: crypto.randomUUID() });
+          } else {
+            tx.objectStore(CANDIDATE_STORE).delete(current.id);
+          }
+        } catch (error) { failure = error; tx.abort(); }
+      };
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Review could not be saved"));
+  });
+  for (const { candidate } of entries) revokeImageUrl(candidate.id);
+  publishLocalProofChange("change");
 }
 
 export async function requestLocalProofPersistence(): Promise<boolean> {

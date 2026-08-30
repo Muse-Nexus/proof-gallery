@@ -1,15 +1,17 @@
 # Proof Gallery
 
-**A free, local-first gallery for saving and retrieving concrete evidence — source-faithful, user-initiated, and private to the storage mode you choose.**
+**A free, local-first place for real evidence of being loved, valued, connected, and accomplished.**
 
-![Proof Gallery — Keep the receipts your brain misplaces.](public/og.png)
+![Proof Gallery — Evidence that you matter. Decorative paper art, not saved Proof.](public/og-purpose.png)
 
 Try the browser-local edition at [proof-gallery-9jn.pages.dev](https://proof-gallery-9jn.pages.dev/).
 
 Proof Gallery is for moments when depression or a difficult week makes positive
 autobiographical evidence hard to access. Save the actual message, receipt,
 photo, finished work, award, recovery moment, or memory with its date and
-source. Later, search only that collection.
+source. Later, search only that collection. This is not merely a record of tasks
+or financial receipts: care, belonging, being chosen, parenting, creativity, and
+recovery are central. It never scores whether a person is good or worthy.
 
 > Proof does not cancel pain or demand optimism. It restores concrete evidence
 > you chose to save.
@@ -18,7 +20,10 @@ source. Later, search only that collection.
 
 - An explicit, no-account local mode backed by this browser profile's IndexedDB.
 - An optional hosted Supabase mode with owner accounts and row-level security.
-- Images or screenshots stored beside the item in the selected mode.
+- Photos and screenshots in either mode; short MP4/WebM clips in local mode.
+- A browser-local media review inbox: choose a batch or a supported folder,
+  inspect original media, edit details, and explicitly save selected items.
+  Pending items are physically separate from saved Proof and never searched.
 - Exact evidence, occurred date, source type/detail, category, tags, person, and
   project.
 - Category/tag filters, newest ordering, and relevance ordering during search.
@@ -184,14 +189,49 @@ bun run test:integration:local
 The temporary file contains a local service-role credential and is removed on
 shell exit. All tests and examples must stay explicitly synthetic.
 
-## Scope
+## Photos and media
 
-The standalone MVP stops at manual CRUD, images, filtering, scoped retrieval,
-and explicit local backup/restore. Drive and Dropbox connectors, background
-sync, autonomous mining, review inboxes, public sharing, digests, model
-orchestration, mood diagnosis, and generalized life logging are deliberately
-out of scope. Manually placing an exported backup in a private Drive or Dropbox
-folder does not make either service a Proof Gallery connector.
+Open **Photos & media** in local mode. A standard file picker accepts selected
+files from Mac, Android, or PC; a folder picker is also shown where supported.
+It is a one-time selection, not a photo-library grant or continuous folder watch.
+No companion installation or external account is required for this path.
+
+- JPEG, PNG, WebP, GIF, MP4, and WebM; 10 MB per file.
+- Up to 50 files / 48 MiB per batch; inbox limited to 100 files / 48 MiB.
+- Duplicate file bytes are skipped across pending and saved attachments.
+- The original file is retained, including embedded metadata. No vision model,
+  face recognition, person identification, OCR, or AI interpretation runs.
+- Filename is the initial title/source; occurred date and category are not
+  guessed. File modification time is not an event date.
+- Reviewers must choose a category, individually or for a selected batch.
+  Notes may be empty when an attachment is present. Tags can be added in bulk.
+- Details must be saved or discarded before bulk approval. Approval checks
+  media integrity and atomically moves the selected items to saved Proof.
+- Pending items survive reload but **are excluded from backups and search**.
+  Remove them from review separately; the original files are untouched.
+- Export Apple Photos selections as JPEG first; HEIC/HEIF and MOV are not yet
+  supported. MP4/WebM codec playback depends on the browser. Original-file
+  download remains available even when preview fails.
+- This is cross-platform file access, **not cross-device sync**. Each browser
+  profile has its own collection. Use private backups for manual transfer.
+
+Local backup version 2 supports attachment-only Proof and clips. Version 1
+image/text backups still import. Archives retain the historical `image` field
+name for media and are capped at 64 MiB encoded / 48 MiB decoded media. Pending
+media is not included; keep original files until approved Proof is backed up.
+The hosted Supabase mode remains raster-only with its existing validation,
+required evidence text, RLS, and private bucket. No database migration is needed.
+
+## Scope and direction
+
+The product direction is permissioned discovery that reduces the owner's
+collection work, while preserving literal evidence and a private review
+boundary. The implemented slice is selected-media intake, review, CRUD,
+filtering, scoped retrieval, and local backup/restore. Continuous collection,
+cloud connectors, native photo-library access, and a ChorOS transfer bridge are
+not implemented. Existing ChorOS grants do not transfer to this app. Public
+sharing of evidence, mood diagnosis, worth scoring, invented emotional meaning,
+and mandatory model orchestration are not part of the product.
 
 ## Contributing and security
 
