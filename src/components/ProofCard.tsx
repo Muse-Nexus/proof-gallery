@@ -7,7 +7,7 @@ import {
 import { ProofMedia } from "./ProofMedia";
 import { validateCompanionReceipt } from "../lib/companion-package";
 
-function companionLabel(provenance: ProofItem["provenance"]): string | null {
+export function companionLabel(provenance: ProofItem["provenance"]): string | null {
   const receipt = provenance.import_receipt;
   if (!receipt || typeof receipt !== "object" || !("method" in receipt) || receipt.method !== "mac_photos_companion") return null;
   try {
@@ -21,11 +21,13 @@ export function ProofCard({
   onEdit,
   onDelete,
   disabled = false,
+  onReadStory,
 }: {
   item: ProofItem;
   onEdit: (item: ProofItem) => void;
   onDelete: (item: ProofItem) => void;
   disabled?: boolean;
+  onReadStory?: (item: ProofItem) => void;
 }) {
   const hasEvidenceAttachment = Boolean(item.imagePath);
   const hasEvidencePreview = Boolean(item.imagePath && item.imageUrl);
@@ -112,6 +114,7 @@ export function ProofCard({
           </ul>
         )}
         <div className="card-actions">
+          {onReadStory && <button className="secondary-button" type="button" disabled={disabled} onClick={() => onReadStory(item)}>Read as a story</button>}
           <button type="button" className="secondary-button" disabled={disabled} onClick={() => onEdit(item)}>
             Edit
           </button>

@@ -1661,6 +1661,30 @@ textarea {
 .candidate-details { border-top: 1px solid #ded7cd; margin-top: .8rem; padding-top: .8rem; }
 .candidate-details summary { cursor: pointer; font-weight: 500; }
 .candidate-details fieldset { border: 0; padding: 1rem 0 0; display: grid; gap: .8rem; min-width: 0; }
+.candidate-note fieldset { border: 0; padding: .6rem 0 0; display: grid; gap: .8rem; min-width: 0; }
+.candidate-note textarea { width: 100%; min-width: 0; resize: vertical; }
+.candidate-extra-fields { display: grid; gap: .8rem; padding-top: .8rem; }
+.candidate-note .checkbox-row input { width: auto; }
+.note-suggestions { font-size: .82rem; padding: .8rem; background: #f5f2eb; border-radius: .7rem; }
+.note-suggestions p { margin: 0 0 .45rem; }
+.note-suggestions small { display: block; margin-top: .5rem; color: var(--muted); }
+.related-proof-list { font-size: .85rem; }
+.related-proof-list article { border-top: 1px solid #ded7cd; padding-block: .7rem; }
+.related-proof-list h4 { font-weight: 500; margin-block: .3rem; }
+.related-proof-list blockquote { margin-inline: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.proof-story { margin: 1.5rem 0; padding: clamp(1.2rem, 4vw, 3rem); background: #faf6ee; border: 1px solid #d6cbbd; border-radius: 1.4rem; }
+.proof-story h2 { font-weight: 450; letter-spacing: -.03em; }
+.proof-story header p { max-width: 65ch; line-height: 1.6; }
+.story-connections { border-block: 1px solid #ded7cd; padding: 1rem 0; margin: 1rem 0 2rem; }
+.story-connections summary { cursor: pointer; }
+.story-connections .checkbox-row { align-items: flex-start; margin-block: 1rem; }
+.story-connections small { display: block; color: var(--muted); font-size: .8rem; margin-top: .3rem; }
+.story-sequence { list-style: none; padding: 0; max-width: 680px; margin: auto; }
+.story-sequence li + li { border-top: 1px solid #ded7cd; margin-top: 2rem; padding-top: 2rem; }
+.story-sequence h3 { font-size: 1.15rem; font-weight: 450; }
+.story-sequence blockquote { margin: 1rem 0; font-size: 1.35rem; font-weight: 400; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.story-sequence .proof-image { max-height: 460px; width: 100%; object-fit: contain; border-radius: .8rem; }
+.story-date, .story-source { font-size: .85rem; color: #62594f; overflow-wrap: anywhere; }
 .candidate-details input, .candidate-details select, .candidate-details textarea { width: 100%; min-width: 0; }
 .media-download { display: inline-block; font-size: .8rem; color: inherit; padding: .6rem; text-underline-offset: 3px; }
 .media-fallback, .review-empty { padding: 1.5rem 0; font-size: .95rem; }
