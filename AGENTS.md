@@ -27,6 +27,15 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
   approval, even if another agent or mode is autonomous.
 - Preserve original media, literal words, sources, and known dates. Do not infer
   love, relationships, identity, goodness, or event dates from an image or filename.
+- Keep photo review note-first. Optional word-based organization must remain
+  visible and respect manual fields, removals, negation, and ambiguity; never
+  silently treat it as an AI assessment or as approval. A short note is not a
+  grant to scan other sources. Related lookup uses saved Proof in the current
+  owner/collection only, explains shared words, and runs only on request.
+- The current story feature is a derived reading view of explicitly chosen
+  saved notes/photos, not generated prose or a new evidence item. Preserve exact
+  words, dates, source labels, and attachment receipts; separate unknown dates.
+  Never invent transitions, causal links, feelings, identities, or life lessons.
 - Use unknown/blank fields rather than invented meaning. Import time and file
   modification time are not occurred dates. Decorative AI/stock art is not Proof.
 - No library/account scanning without a bounded user-selected source. Never

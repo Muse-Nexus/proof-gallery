@@ -12,6 +12,7 @@ import { DecorativeVisual } from "./components/DecorativeVisual";
 import { ProofCard } from "./components/ProofCard";
 import { ProofEditor } from "./components/ProofEditor";
 import { MediaInbox } from "./components/MediaInbox";
+import { ProofStory } from "./components/ProofStory";
 import {
   createProofItem,
   deleteProofItem,
@@ -286,6 +287,8 @@ function Gallery({
   const [editor, setEditor] = useState<ProofItem | "new" | null>(null);
   const [showMediaInbox, setShowMediaInbox] = useState(false);
   const [mediaDirty, setMediaDirty] = useState(false);
+  const [storySeedId, setStorySeedId] = useState<string | null>(null);
+  const storySeed = items.find(item => item.id === storySeedId);
   const importInput = useRef<HTMLInputElement>(null);
 
   async function reload() {
@@ -639,7 +642,9 @@ function Gallery({
         </section>
       )}
 
-      {isLocal && showMediaInbox && <MediaInbox busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
+      {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
+
+      {storySeed && <ProofStory key={storySeed.id} seed={storySeed} savedProof={items} onClose={() => setStorySeedId(null)} />}
 
       <section className="search-panel" aria-labelledby="search-title">
         <div>
@@ -784,7 +789,7 @@ function Gallery({
       ) : (
         <section className="gallery-grid" aria-label="Saved Proof">
           {visible.map((item) => (
-            <ProofCard key={item.id} item={item} disabled={busy} onEdit={setEditor} onDelete={(candidate) => void remove(candidate)} />
+            <ProofCard key={item.id} item={item} disabled={busy} onEdit={setEditor} onReadStory={candidate => setStorySeedId(candidate.id)} onDelete={(candidate) => void remove(candidate)} />
           ))}
         </section>
       )}

@@ -34,6 +34,21 @@ Unsaved review details are retained across imports and cross-tab refreshes,
 including changes received during a storage read. Saving details checks the
 stored revision; only a successful save or explicit discard replaces that draft.
 
+The note-first helper uses deterministic rules entirely in the browser. It
+suggests labels only from the user's written note, not photo pixels, OCR,
+filenames, or another source. Saving a note edits the pending candidate through
+the same revision-checked path; it does not approve it. Manual fields remain
+authoritative and suggestions can be disabled.
+
+Related-Proof lookup and the story reading view use only the already-loaded
+saved collection, additionally filtered to the same owner and `personal`
+visibility. They do not search pending candidates, another mode, or ordinary
+memories. Lookup and story opening are user-initiated; related story moments
+require individual selection. Stories are derived UI state, not generated or
+persisted records. No extra evidence/model request, schema, embedding, telemetry,
+or backup content is introduced. Existing stored-attachment preview handling and
+companion derivative labels apply in the story view too.
+
 Version-2 local backups include approved photo/video attachments and allow an
 empty note only with a real attachment; version-1 photo/text archives remain
 readable. Pending review is excluded. Removing saved Proof does not remove

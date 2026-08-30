@@ -35,8 +35,10 @@ recovery are central. It never scores whether a person is good or worthy.
 - An optional hosted Supabase mode with owner accounts and row-level security.
 - Photos and screenshots in either mode; short MP4/WebM clips in local mode.
 - A browser-local media review inbox: choose a batch or a supported folder,
-  inspect original media, edit details, and explicitly save selected items.
+  inspect original media, add a short note, and explicitly save selected items.
   Pending items are physically separate from saved Proof and never searched.
+- Note-first review with optional, visible word-based category/tag suggestions,
+  connections to saved Proof, and an exact-note story reading view.
 - Exact evidence, occurred date, source type/detail, category, tags, person, and
   project.
 - Category/tag filters, newest ordering, and relevance ordering during search.
@@ -217,8 +219,9 @@ No companion installation or external account is required for this path.
   face recognition, person identification, OCR, or AI interpretation runs.
 - Filename is the initial title/source; occurred date and category are not
   guessed. File modification time is not an event date.
-- Reviewers must choose a category, individually or for a selected batch.
-  Notes may be empty when an attachment is present. Tags can be added in bulk.
+- Reviewers must choose or accept a suggested category, individually or for a
+  selected batch. Notes may be empty when an attachment is present. Tags can be
+  added in bulk.
 - Details must be saved or discarded before bulk approval. Approval checks
   media integrity and atomically moves the selected items to saved Proof.
 - Pending items survive reload but **are excluded from backups and search**.
@@ -237,6 +240,36 @@ name for media and are capped at 64 MiB encoded / 48 MiB decoded media. Pending
 media is not included; keep original files until approved Proof is backed up.
 The hosted Supabase mode remains raster-only with its existing validation,
 required evidence text, RLS, and private bucket. No database migration is needed.
+
+## A photo, a short note, and a story
+
+In **Photos & media**, each pending image has a visible **Your short note** field.
+Write a few words and choose **Save note**; title, date, source, and other fields
+live under **Extra details · optional**. This saves a review draft, not approved
+Proof. A category is required only when approving it into the gallery.
+
+The app suggests a category from a small set of visible word cues, adds up to
+six literal-word tags, and can replace an untouched filename title with the
+beginning of your note. Suggestions are shown before saving and can be switched
+off. Fields you change manually are respected, including removed tags and an
+explicitly cleared category. Later note edits default to suggestions off.
+Ambiguous or negated cues leave the category unresolved. A mention of crying
+does not infer recovery, happiness, or why it happened. Dates, names, identity,
+sources, and emotional meaning are never guessed.
+
+**Find related saved Proof** checks meaningful shared words in the current note,
+tags, person, and project against already-loaded saved Proof in the same
+collection. It explains the shared words and displays the original notes, dates,
+and sources. This is lexical matching, not semantic or AI interpretation. Pending
+photos and ordinary ChorOS memories are not searched; an unsaved note is clearly
+labelled as a draft. Nothing is sent to a model or provider.
+
+On a saved card, **Read as a story** opens a quiet, image-forward reading view.
+You can choose up to six related saved moments to join it. The sequence keeps
+your exact notes and source labels, ordering known occurred dates first and
+marking unknown dates separately. It does not generate narrative prose, invent
+transitions, or save a new evidence item. Removing an item from saved Proof also
+removes it from the reading view. A generated story writer is not included.
 
 ## Scope and direction
 

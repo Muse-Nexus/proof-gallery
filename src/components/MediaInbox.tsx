@@ -6,16 +6,25 @@ import {
   type CandidateInput, type LocalProofCandidate,
 } from "../lib/local-proof-store";
 import { LOCAL_MEDIA_ACCEPT } from "../lib/media";
-import { PROOF_CATEGORIES, parseTags, type ProofCategory } from "../lib/proof";
+import { PROOF_CATEGORIES, categoryLabel, formatProofDate, parseTags, type ProofCategory, type ProofItem } from "../lib/proof";
+import { relatedSavedProof, suggestNoteOrganization } from "../lib/note-assist";
 import { ProofMedia } from "./ProofMedia";
 
-function CandidateDetails({ candidate, disabled, onSave, onDirtyChange }: {
+function CandidateDetails({ candidate, disabled, savedProof, onSave, onDirtyChange }: {
   candidate: LocalProofCandidate; disabled: boolean;
+  savedProof: readonly ProofItem[];
   onSave: (input: CandidateInput) => Promise<void>;
   onDirtyChange: (id: string, dirty: boolean) => void;
 }) {
   const [input, setInput] = useState(candidate.input);
   const [tags, setTags] = useState(input.tags.join(", "));
+  const [useSuggestions, setUseSuggestions] = useState(!candidate.input.evidenceText.trim());
+  const [touched, setTouched] = useState({ title: false, category: false, tags: false });
+  const [showRelated, setShowRelated] = useState(false);
+  const suggestions = suggestNoteOrganization(input.evidenceText);
+  const canSuggestCategory = !touched.category && !input.category && suggestions.category;
+  const newTags = touched.tags ? [] : suggestions.tags.filter(tag => !parseTags(tags).includes(tag));
+  const related = showRelated ? relatedSavedProof({ id: candidate.id, userId: candidate.userId, ...input, tags: parseTags(tags) }, savedProof) : [];
   const dirty = JSON.stringify(input) !== JSON.stringify(candidate.input) || tags !== candidate.input.tags.join(", ");
   useEffect(() => {
     onDirtyChange(candidate.id, dirty);
@@ -23,35 +32,67 @@ function CandidateDetails({ candidate, disabled, onSave, onDirtyChange }: {
   }, [candidate.id, dirty, onDirtyChange]);
   function submit(event: FormEvent) {
     event.preventDefault();
-    void onSave({ ...input, tags: parseTags(tags) });
+    const importedTitle = (candidate.companionReceipt?.originalFilename ?? candidate.fileName).slice(0, 200);
+    const filenameTitle = input.title === candidate.input.title && candidate.input.title === importedTitle;
+    void onSave({ ...input,
+      ...(useSuggestions ? {
+        title: !touched.title && filenameTitle && suggestions.title ? suggestions.title : input.title,
+        category: touched.category ? input.category : input.category ?? suggestions.category,
+      } : {}),
+      tags: parseTags([...parseTags(tags), ...(useSuggestions ? newTags : [])].join(",")),
+    });
   }
-  return <details className="candidate-details">
-    <summary>Edit details</summary>
-    <form onSubmit={submit}>
+  return <form className="candidate-note" onSubmit={submit}>
       <fieldset disabled={disabled}>
-        <label>Title<input value={input.title} maxLength={200} required onChange={e => setInput({ ...input, title: e.target.value })} /></label>
-        <label>Note or exact words <span className="optional">optional; the media can be the evidence</span>
-          <textarea value={input.evidenceText} maxLength={20000} rows={3} onChange={e => setInput({ ...input, evidenceText: e.target.value })} />
+        <label>Your short note <span className="optional">a few words are enough</span>
+          <textarea value={input.evidenceText} maxLength={20000} rows={3} placeholder="What would you like to remember about this?" onChange={e => setInput({ ...input, evidenceText: e.target.value })} />
         </label>
-        <label>Category<select value={input.category ?? ""} onChange={e => setInput({ ...input, category: (e.target.value || null) as ProofCategory | null })}>
+        {input.evidenceText.trim() && <div className="note-suggestions">
+          <p>{input.category ? `Keeping your category: ${categoryLabel(input.category)}.` : canSuggestCategory ? `Suggested from your words: ${categoryLabel(suggestions.category!)} (word cue: “${suggestions.cue}”).` : "Category left for review. You can choose one in Extra details."}</p>
+          {newTags.length > 0 && <p>Tags: {newTags.map(tag => `#${tag}`).join(" ")}</p>}
+          <label className="checkbox-row"><input type="checkbox" checked={useSuggestions} onChange={e => setUseSuggestions(e.target.checked)} />Use suggestions when saving this note</label>
+          <small>Simple word matches, not AI interpretation. Your note, date, source, and manual choices stay intact.</small>
+        </div>}
+        <button className="secondary-button">Save note</button>
+        <details className="candidate-details">
+        <summary>Extra details · optional</summary>
+        <div className="candidate-extra-fields">
+        <label>Title<input value={input.title} maxLength={200} required onChange={e => { setTouched({ ...touched, title: true }); setInput({ ...input, title: e.target.value }); }} /></label>
+        <label>Category<select value={input.category ?? ""} onChange={e => { setTouched({ ...touched, category: true }); setInput({ ...input, category: (e.target.value || null) as ProofCategory | null }); }}>
           <option value="">Choose during review</option>
           {PROOF_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select></label>
         <label>Occurred date <span className="optional">leave blank if unknown</span><input type="date" value={input.occurredOn ?? ""} onChange={e => setInput({ ...input, occurredOn: e.target.value || null })} /></label>
         <label>Source<input value={input.source ?? ""} maxLength={500} onChange={e => setInput({ ...input, source: e.target.value || null })} /></label>
         <label>Person <span className="optional">optional</span><input value={input.person ?? ""} maxLength={200} onChange={e => setInput({ ...input, person: e.target.value || null })} /></label>
-        <label>Tags <span className="optional">comma separated</span><input value={tags} onChange={e => setTags(e.target.value)} /></label>
+        <label>Tags <span className="optional">comma separated</span><input value={tags} onChange={e => { setTouched({ ...touched, tags: true }); setTags(e.target.value); }} /></label>
         <button className="secondary-button">Save details</button>
-        {dirty && <button type="button" className="text-button" onClick={() => { setInput(candidate.input); setTags(candidate.input.tags.join(", ")); }}>Discard detail edits</button>}
+        </div>
+        </details>
+        {dirty && <button type="button" className="text-button" onClick={() => {
+          setInput(candidate.input); setTags(candidate.input.tags.join(", "));
+          setTouched({ title: false, category: false, tags: false }); setUseSuggestions(!candidate.input.evidenceText.trim());
+        }}>Discard detail edits</button>}
+        <button className="text-button" type="button" disabled={!input.evidenceText.trim()} onClick={() => setShowRelated(value => !value)}>{showRelated ? "Hide related Proof" : "Find related saved Proof"}</button>
+        {showRelated && <div className="related-proof-list">
+          <p>Possible connections by shared words—not a conclusion about what this moment means. Only saved Proof in this collection is checked.</p>
+          {dirty && <p>Your current note is still an unsaved draft.</p>}
+          {related.length === 0 && <p>No shared-word matches yet. This does not say anything about the value of this moment.</p>}
+          {related.map(({ item, sharedWords }) => <article key={item.id}>
+            <h4>{item.title}</h4><p>Shared words: {sharedWords.join(", ")}</p>
+            {item.evidenceText ? <blockquote>{item.evidenceText}</blockquote> : <p>No note saved; see the original attachment in your gallery.</p>}
+            <p>{formatProofDate(item.occurredOn)} · {item.source ?? "Source: MISSING"}</p>
+          </article>)}
+        </div>}
       </fieldset>
-    </form>
-  </details>;
+    </form>;
 }
 
-export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateChange }: {
+export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateChange, savedProof = [] }: {
   busy: boolean; onBusyChange: (busy: boolean) => void;
   onSaved: () => Promise<void>; onClose: () => void;
   onDirtyStateChange?: (dirty: boolean) => void;
+  savedProof?: readonly ProofItem[];
 }) {
   const [candidates, setCandidates] = useState<LocalProofCandidate[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -212,7 +253,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
         <p className="review-source">{candidate.input.source ?? "Source: MISSING"}</p>
         <p className="review-source">Occurred: {candidate.input.occurredOn ?? "MISSING"}</p>
         {candidate.companionReceipt && <p className="review-source">{candidate.companionReceipt.representation === "jpeg-preview" ? "JPEG preview · original remains in Apple Photos" : "Original photo bytes from Apple Photos"}. Imported date source: Photos metadata. No identity or meaning inferred.</p>}
-        <CandidateDetails candidate={candidate} disabled={busy} onSave={input => act("edit", candidate, input)} onDirtyChange={onDirtyChange} />
+        <CandidateDetails candidate={candidate} savedProof={savedProof} disabled={busy} onSave={input => act("edit", candidate, input)} onDirtyChange={onDirtyChange} />
       </article>)}</div>
     </> : <p className="review-empty">No media waiting for review. Choose a few photos or screenshots to begin.</p>}
   </section>;
