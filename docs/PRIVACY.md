@@ -15,6 +15,9 @@ the file modification time is never substituted. Original metadata is retained.
 Local MP4/WebM clips are limited to 10 MB, played only on request through a native
 video element, with an original download when the browser cannot decode them.
 Hosted Supabase attachments remain raster-only and retain existing RLS/policies.
+Unsaved review details are retained across imports and cross-tab refreshes,
+including changes received during a storage read. Saving details checks the
+stored revision; only a successful save or explicit discard replaces that draft.
 
 Version-2 local backups include approved photo/video attachments and allow an
 empty note only with a real attachment; version-1 photo/text archives remain

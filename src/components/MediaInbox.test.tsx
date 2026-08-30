@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MediaInbox } from "./MediaInbox";
 import { listLocalProofCandidates, resolveLocalProofCandidates, stageLocalProofMedia, subscribeToLocalProofChanges, type LocalProofCandidate } from "../lib/local-proof-store";
@@ -53,8 +53,49 @@ it("retains a visible unsaved draft when another tab changes the candidate", asy
   vi.mocked(listLocalProofCandidates).mockResolvedValue([{ ...candidate, revision: "33333333-3333-4333-8333-333333333333", input: { ...candidate.input, title: "Synthetic remote title" } }]);
   const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
   notify("change");
-  expect(await screen.findByText(/Review changed in another tab/)).toBeInTheDocument();
+  expect(await screen.findByText(/Review has changes to load/)).toBeInTheDocument();
   expect(screen.getByLabelText("Title")).toHaveValue("Synthetic unsaved detail");
   fireEvent.click(screen.getByRole("button", { name: "Discard detail edits" }));
   await waitFor(() => expect(screen.getByLabelText("Title")).toHaveValue("Synthetic remote title"));
+});
+it("preserves dirty details when importing after a deferred remote revision", async () => {
+  render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+  await screen.findByText("Pending review · not saved Proof");
+  fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Synthetic unsaved detail" } });
+  vi.mocked(listLocalProofCandidates).mockResolvedValue([{ ...candidate, revision: "remote-revision", input: { ...candidate.input, title: "Synthetic remote title" } }]);
+  act(() => vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0]("change"));
+  fireEvent.change(screen.getByLabelText("Choose photos or clips"), { target: { files: [new File(["synthetic"], "second.png", { type: "image/png" })] } });
+  await waitFor(() => expect(listLocalProofCandidates).toHaveBeenCalledTimes(2));
+  expect(screen.getByLabelText("Title")).toHaveValue("Synthetic unsaved detail");
+  fireEvent.click(screen.getByRole("button", { name: "Discard detail edits" }));
+  await waitFor(() => expect(screen.getByLabelText("Title")).toHaveValue("Synthetic remote title"));
+});
+it("applies a saved row without discarding another row's unsaved details", async () => {
+  const second = { ...candidate, id: "second", input: { ...candidate.input, title: "Synthetic second photo" } };
+  vi.mocked(listLocalProofCandidates).mockResolvedValue([candidate, second]);
+  render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+  await screen.findByRole("checkbox", { name: "Select all 2" });
+  fireEvent.change(screen.getAllByLabelText("Title")[0], { target: { value: "Synthetic unsaved first" } });
+  fireEvent.change(screen.getAllByLabelText("Title")[1], { target: { value: "Synthetic saved second" } });
+  vi.mocked(listLocalProofCandidates).mockResolvedValue([
+    { ...candidate, revision: "remote-first", input: { ...candidate.input, title: "Synthetic remote first" } },
+    { ...second, revision: "saved-second", input: { ...second.input, title: "Synthetic saved second" } },
+  ]);
+  fireEvent.click(screen.getAllByRole("button", { name: "Save details" })[1]);
+  await waitFor(() => expect(screen.getAllByRole("button", { name: "Discard detail edits" })).toHaveLength(1));
+  expect(screen.getAllByLabelText("Title")[0]).toHaveValue("Synthetic unsaved first");
+  expect(screen.getAllByLabelText("Title")[1]).toHaveValue("Synthetic saved second");
+  fireEvent.click(screen.getByRole("button", { name: "Discard detail edits" }));
+  await waitFor(() => expect(screen.getAllByLabelText("Title")[0]).toHaveValue("Synthetic remote first"));
+});
+it("preserves a draft started while a refresh read is in flight", async () => {
+  render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+  await screen.findByText("Pending review · not saved Proof");
+  let finishRead!: (rows: LocalProofCandidate[]) => void;
+  vi.mocked(listLocalProofCandidates).mockReturnValueOnce(new Promise(resolve => { finishRead = resolve; }));
+  act(() => vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0]("change"));
+  fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Synthetic new draft" } });
+  await act(async () => finishRead([{ ...candidate, revision: "remote-revision", input: { ...candidate.input, title: "Synthetic remote title" } }]));
+  expect(screen.getByLabelText("Title")).toHaveValue("Synthetic new draft");
+  expect(screen.getByText(/Review has changes to load/)).toBeInTheDocument();
 });

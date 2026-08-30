@@ -62,13 +62,13 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
   const [rejected, setRejected] = useState<{ name: string; reason: string }[]>([]);
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set());
   const [externalChange, setExternalChange] = useState(false);
-  const dirtyRef = useRef(false);
-  dirtyRef.current = dirtyIds.size > 0;
+  const dirtyRef = useRef<Set<string>>(new Set());
   const onDirtyChange = useCallback((id: string, dirty: boolean) => {
-    setDirtyIds(current => {
-      if (current.has(id) === dirty) return current;
-      const next = new Set(current); if (dirty) next.add(id); else next.delete(id); return next;
-    });
+    const current = dirtyRef.current;
+    if (current.has(id) === dirty) return;
+    const next = new Set(current); if (dirty) next.add(id); else next.delete(id);
+    dirtyRef.current = next;
+    setDirtyIds(next);
   }, []);
   useEffect(() => {
     onDirtyStateChange?.(dirtyIds.size > 0);
@@ -78,9 +78,22 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
   const folderInput = useRef<HTMLInputElement>(null);
   const [folderSupported] = useState(() => "webkitdirectory" in document.createElement("input"));
 
-  async function refresh() {
+  async function refresh(options: { replaceIds?: string[]; discardDrafts?: boolean } = {}) {
     try {
-      setCandidates(await listLocalProofCandidates());
+      const incoming = await listLocalProofCandidates();
+      // Read dirty state after the asynchronous load. Every refresh path must
+      // preserve drafts, not just the cross-tab subscription.
+      const preserveIds = new Set(options.discardDrafts ? [] : dirtyRef.current);
+      options.replaceIds?.forEach(id => preserveIds.delete(id));
+      if (preserveIds.size) setExternalChange(true);
+      setCandidates(current => {
+        const drafts = new Map(current.filter(c => preserveIds.has(c.id)).map(c => [c.id, c]));
+        const incomingIds = new Set(incoming.map(c => c.id));
+        return [
+          ...incoming.map(c => drafts.get(c.id) ?? c),
+          ...current.filter(c => preserveIds.has(c.id) && !incomingIds.has(c.id)),
+        ];
+      });
       setSelected(new Set());
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load review inbox"); }
   }
@@ -88,7 +101,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
     folderInput.current?.setAttribute("webkitdirectory", "");
     void refresh();
     return subscribeToLocalProofChanges(() => {
-      if (dirtyRef.current) setExternalChange(true);
+      if (dirtyRef.current.size) setExternalChange(true);
       else void refresh();
     });
   }, []);
@@ -117,7 +130,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
   async function clearReview() {
     if (busy || !window.confirm("Remove every pending photo, clip, and draft from this browser's review inbox? Saved Proof and original files are untouched. Unsaved detail edits will be lost.")) return;
     onBusyChange(true); setError(null);
-    try { await clearLocalProofCandidates(); await refresh(); setMessage("Review inbox cleared. Saved Proof and original files are untouched."); }
+    try { await clearLocalProofCandidates(); await refresh({ discardDrafts: true }); setMessage("Review inbox cleared. Saved Proof and original files are untouched."); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not clear review inbox"); }
     finally { onBusyChange(false); }
   }
@@ -136,7 +149,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
         tags: parseTags([...candidate.input.tags, ...parseTags(tags)].join(",")),
       } : candidate.input) })), action);
       setMessage(action === "approve" ? `${targets.length} saved to your local Proof. Back up saved Proof to keep a recovery copy.` : action === "edit" ? "Review details saved. This is not saved Proof yet." : "Removed from review. Original files were not changed.");
-      await refresh();
+      await refresh({ replaceIds: action === "edit" ? targets.map(c => c.id) : [] });
       if (action === "approve") await onSaved();
     } catch (e) { setError(e instanceof Error ? e.message : "Review could not be saved"); }
     finally { onBusyChange(false); }
@@ -162,7 +175,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
     <p className="media-guidance"><strong>Review items are not in search or backups.</strong> Original files are untouched. Keep them until you save and back up your Proof.</p>
     {message && <p className="notice-banner" role="status">{message}</p>}
     {error && <p className="error-banner" role="alert">{error}</p>}
-    {externalChange && <p className="notice-banner" role="status">Review changed in another tab. Your unsaved details are still here. Saving checks for conflicts; discard edits to reload the latest items.</p>}
+    {externalChange && <p className="notice-banner" role="status">Review has changes to load. Your unsaved details are still here. Saving checks for conflicts; discard edits to reload the latest items.</p>}
     {rejected.length > 0 && <details><summary>{rejected.length} files could not be imported</summary><ul>{rejected.map((r, i) => <li key={i}>{r.name}: {r.reason}</li>)}</ul></details>}
     {candidates.length > 0 ? <>
       {dirtyIds.size > 0 && <p role="status">Save or discard edited details before saving a selection or closing the inbox.</p>}
