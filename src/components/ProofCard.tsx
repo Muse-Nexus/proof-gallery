@@ -9,10 +9,12 @@ export function ProofCard({
   item,
   onEdit,
   onDelete,
+  disabled = false,
 }: {
   item: ProofItem;
   onEdit: (item: ProofItem) => void;
   onDelete: (item: ProofItem) => void;
+  disabled?: boolean;
 }) {
   const hasEvidenceAttachment = Boolean(item.imagePath);
   const hasEvidencePreview = Boolean(item.imagePath && item.imageUrl);
@@ -103,10 +105,10 @@ export function ProofCard({
           </ul>
         )}
         <div className="card-actions">
-          <button type="button" className="secondary-button" onClick={() => onEdit(item)}>
+          <button type="button" className="secondary-button" disabled={disabled} onClick={() => onEdit(item)}>
             Edit
           </button>
-          <button type="button" className="danger-button" onClick={() => onDelete(item)}>
+          <button type="button" className="danger-button" disabled={disabled} onClick={() => onDelete(item)}>
             Delete
           </button>
         </div>

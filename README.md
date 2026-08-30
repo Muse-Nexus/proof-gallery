@@ -22,6 +22,8 @@ source. Later, search only that collection.
 - Exact evidence, occurred date, source type/detail, category, tags, person, and
   project.
 - Category/tag filters, newest ordering, and relevance ordering during search.
+- Visible result counts, separate search/filter resets, and a show-all action
+  when filters or search hide the saved collection.
 - Deterministic Proof-only lexical search that works locally without a model,
   provider, or paid API key.
 - Optional semantic embeddings for Supabase mode through one OpenAI-compatible
@@ -106,6 +108,13 @@ Proof text and search text leave your Supabase instance only when you configure
 an external embedding endpoint. Images are never sent for vision analysis.
 
 ## Visual truth boundary
+
+The interface uses medium-weight system typography with no external font
+request. Filtered-empty states do not claim that saved evidence is missing,
+and the editor stays open while a save is pending to prevent accidental
+dismissal through Escape, the backdrop, or its close controls.
+Add, Edit, and Delete wait for other pending operations to finish, so an
+unrelated search or backup cannot open an editor with locked save controls.
 
 The landing page bundles one credited Unsplash paper collage and one original
 AI-generated cut-paper illustration. They load from this app's own origin and

@@ -64,10 +64,14 @@ export function ProofEditor({
     return () => previouslyFocused?.focus();
   }, []);
 
+  function closeEditor() {
+    if (!busy) onClose();
+  }
+
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      closeEditor();
       return;
     }
     if (event.key !== "Tab") return;
@@ -145,12 +149,13 @@ export function ProofEditor({
   );
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="dialog-backdrop" role="presentation" onMouseDown={closeEditor}>
       <section
         ref={dialogRef}
         className="editor-dialog"
         role="dialog"
         aria-modal="true"
+        aria-busy={busy}
         aria-labelledby="editor-title"
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
@@ -160,7 +165,7 @@ export function ProofEditor({
             <span className="privacy-badge">{privacyLabel}</span>
             <h2 id="editor-title">{item ? "Edit Proof" : "Add Proof"}</h2>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close editor">
+          <button type="button" className="icon-button" onClick={closeEditor} disabled={busy} aria-label="Close editor">
             ×
           </button>
         </header>
@@ -287,7 +292,7 @@ export function ProofEditor({
           </label>
           {error && <p className="error-banner full-width">{error}</p>}
           <footer className="editor-actions full-width">
-            <button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="button" className="secondary-button" onClick={closeEditor} disabled={busy}>Cancel</button>
             <button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save Proof"}</button>
           </footer>
         </form>

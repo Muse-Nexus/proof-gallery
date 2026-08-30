@@ -74,6 +74,33 @@ afterEach(() => {
 });
 
 describe("Proof image selection", () => {
+  it.each(["Escape", "backdrop", "close button", "Cancel"])(
+    "prevents dismissal through %s while saving and restores it afterward",
+    (route) => {
+      const onClose = vi.fn();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      const { rerender } = render(
+        <ProofEditor item={null} busy onClose={onClose} onSave={onSave} />,
+      );
+      const dismiss = () => {
+        const dialog = screen.getByRole("dialog");
+        if (route === "Escape") fireEvent.keyDown(dialog, { key: "Escape" });
+        else if (route === "backdrop") fireEvent.mouseDown(dialog.parentElement!);
+        else fireEvent.click(screen.getByRole("button", {
+          name: route === "Cancel" ? "Cancel" : "Close editor",
+        }));
+      };
+      expect(screen.getByRole("dialog")).toHaveAttribute("aria-busy", "true");
+      dismiss();
+      expect(onClose).not.toHaveBeenCalled();
+
+      rerender(<ProofEditor item={null} busy={false} onClose={onClose} onSave={onSave} />);
+      expect(screen.getByRole("dialog")).toHaveAttribute("aria-busy", "false");
+      dismiss();
+      expect(onClose).toHaveBeenCalledOnce();
+    },
+  );
+
   it("keeps keyboard focus inside the dialog and restores it on close", () => {
     const trigger = document.createElement("button");
     trigger.textContent = "Synthetic trigger";
