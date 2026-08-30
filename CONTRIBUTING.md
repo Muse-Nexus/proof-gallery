@@ -12,16 +12,22 @@ Thank you for helping make Proof Gallery safer and more useful.
 5. For local storage or backup changes, use only synthetic versioned archives;
    prove unsupported or malformed input fails closed and that no local evidence
    is sent to a network provider.
-6. Update the smallest relevant documentation.
+6. For Mac companion changes, run `swift test` and `bash build-app.sh` in
+   `companion/macos`. Use synthetic inputs; real Photos verification requires
+   the owner's permission and source selection. Never publish the local
+   ad-hoc-signed bundle as a notarized release.
+7. Update the smallest relevant documentation.
 
 Never commit or paste real evidence, photos, credentials, `.env` files, signed
 URLs, provider responses, production identifiers, or database dumps.
 
 Read AGENTS.md for the purpose and evidence-handling contract. Permissioned
-discovery is the product direction; the implemented source path is local
-selected-media review, not background account/library scanning. Public sharing,
-distress-triggered surfacing, diagnosis, worth scoring, invented meaning, and
-mandatory model orchestration are outside the product.
+discovery is the product direction. Implemented source paths are local
+selected-media review and the optional Mac companion's bounded, active-session
+Photos source. The companion exports candidates for explicit review, not
+saved-Proof backups or automatic sync. General account/library mining, public
+sharing, distress-triggered surfacing, diagnosis, worth scoring, invented
+meaning, and mandatory model orchestration are outside the implemented scope.
 
 Do not attach a real exported backup to an issue or pull request. Local backups
 are plaintext and may contain original image bytes and EXIF metadata.

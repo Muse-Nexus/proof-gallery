@@ -13,6 +13,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  mac-companion:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - name: Test the synthetic companion format
+        working-directory: companion/macos
+        run: swift test
+      - name: Build and verify the local app bundle
+        working-directory: companion/macos
+        run: bash build-app.sh
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15

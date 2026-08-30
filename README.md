@@ -1,5 +1,18 @@
 # Proof Gallery
 
+### Mac Photos companion (local development build)
+
+The optional [Mac companion](docs/COMPANION.md) requests Photos permission only
+when you connect, then reads a chosen album or recent Favorites while open.
+It prepares still photos locally, preserves source/date receipts, and exports
+a private review file. In the web gallery choose **Photos & media → Import
+companion review**. Candidates still need a category and explicit approval.
+
+This is a file handoff, not automatic sync. No iCloud download or cloud AI runs.
+The local app is ad-hoc signed for development; public Mac distribution still
+needs Developer ID signing and notarization. Native Android/Windows companions
+are not included; their selected-media web picker remains available.
+
 **A free, local-first place for real evidence of being loved, valued, connected, and accomplished.**
 
 ![Proof Gallery — Evidence that you matter. Decorative paper art, not saved Proof.](public/og-purpose.png)
@@ -33,17 +46,18 @@ recovery are central. It never scores whether a person is good or worthy.
   provider, or paid API key.
 - Optional semantic embeddings for Supabase mode through one OpenAI-compatible
   endpoint.
-- No app analytics or session replay, advertising, social feed, automatic
-  collection, or ChorOS subscription.
+- No app analytics or session replay, advertising, social feed, collection
+  without a selected source, or ChorOS subscription.
 - An image-forward public design whose bundled stock/AI visuals are visibly
   labeled decoration and are never used as item imagery or evidence.
 
 ## What it is not
 
 This is not a gratitude journal, mood diagnosis, worth score, public profile, or
-argument that suffering is not real. It does not mine email, photos, messages,
-finances, memories, or accounts. It does not automatically surface evidence
-during distress.
+argument that suffering is not real. The web gallery does not mine email,
+photo libraries, messages, finances, memories, or accounts. The optional Mac
+companion reads only its owner-selected Photos scope while active. Neither
+automatically saves candidates as Proof or surfaces evidence during distress.
 
 The repository is public. Evidence is not: local-mode evidence remains in the
 chosen browser profile, and hosted-mode evidence remains in the Supabase
@@ -209,9 +223,11 @@ No companion installation or external account is required for this path.
   media integrity and atomically moves the selected items to saved Proof.
 - Pending items survive reload but **are excluded from backups and search**.
   Remove them from review separately; the original files are untouched.
-- Export Apple Photos selections as JPEG first; HEIC/HEIF and MOV are not yet
-  supported. MP4/WebM codec playback depends on the browser. Original-file
-  download remains available even when preview fails.
+- For the web file picker, export Apple Photos selections as JPEG first;
+  direct HEIC/HEIF and MOV imports are not supported. The optional Mac companion
+  can instead prepare labelled JPEG previews from local HEIC/HEIF originals.
+  MP4/WebM codec playback depends on the browser. Original-file download
+  remains available even when preview fails.
 - This is cross-platform file access, **not cross-device sync**. Each browser
   profile has its own collection. Use private backups for manual transfer.
 
@@ -227,11 +243,13 @@ required evidence text, RLS, and private bucket. No database migration is needed
 The product direction is permissioned discovery that reduces the owner's
 collection work, while preserving literal evidence and a private review
 boundary. The implemented slice is selected-media intake, review, CRUD,
-filtering, scoped retrieval, and local backup/restore. Continuous collection,
-cloud connectors, native photo-library access, and a ChorOS transfer bridge are
-not implemented. Existing ChorOS grants do not transfer to this app. Public
-sharing of evidence, mood diagnosis, worth scoring, invented emotional meaning,
-and mandatory model orchestration are not part of the product.
+filtering, scoped retrieval, and local backup/restore. A local-development Mac
+companion adds bounded Photos access while open and a manual review-file
+handoff. Closed-app collection, cloud connectors, native Android/Windows
+companions, and an automatic ChorOS transfer bridge are not implemented.
+Existing ChorOS grants do not transfer to this app. Public sharing of evidence,
+mood diagnosis, worth scoring, invented emotional meaning, and mandatory model
+orchestration are not part of the product.
 
 ## Contributing and security
 

@@ -1,5 +1,20 @@
 # Privacy and threat model
 
+## Optional Mac Photos companion
+
+The separate [Mac companion](COMPANION.md) can request a Photos grant and watch
+a user-selected album/recent Favorites scope only while active. Web permission
+does not inherit that grant. Photos are exported to an owner-selected local
+review file, then explicitly imported into pending review. No automatic saved
+Proof, cloud upload, iCloud download, or localhost server is introduced.
+
+HEIC JPEG previews are labelled derivatives with original-resource digest/name
+receipts; original HEIC bytes remain in Photos. Original supported media may
+retain EXIF metadata. Capture dates are attributed to Photos metadata. Native
+in-memory batches disappear on exit unless exported, and OS Photos permission
+must be revoked separately from app Disconnect. Both native export files and
+browser storage remain unencrypted. See the companion guide for full limits.
+
 ## Selected-media review (local mode)
 
 Local media intake adds a separate `proof_candidates` IndexedDB store (database
@@ -140,12 +155,14 @@ the private Supabase lexical path instead.
 
 ## Collection boundary
 
-All collection is user-initiated. Proof Gallery does not search or mine Drive,
+All source access is user-initiated. The web gallery does not search or mine Drive,
 Dropbox, email, photos, messages, finance, ordinary memories, or other accounts.
 It does not run background collection or automatically surface evidence during
 distress. The selected-media review inbox does not grant connector or library
-access. Any future continuous collector must preserve that review boundary and
-add explicit source permissions, revocation, and protected credential handling.
+access. The optional native companion has its own bounded Photos source and
+active-session observer, not general account mining. Any further collector must
+preserve that review boundary and add explicit source permissions, revocation,
+and protected credential handling.
 
 ## Decorative visual boundary
 

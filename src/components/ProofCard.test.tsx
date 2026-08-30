@@ -30,6 +30,15 @@ function proofItem(overrides: Partial<ProofItem> = {}): ProofItem {
 afterEach(cleanup);
 
 describe("ProofCard image truth boundary", () => {
+  it("keeps the derivative label even when the editable source text changes", () => {
+    const item = proofItem({ source: "Synthetic edited source", provenance: { import_receipt: {
+      method: "mac_photos_companion", companion: { assetIdentifier: "synthetic", originalFilename: "synthetic.heic", originalSha256: "f".repeat(64), representation: "jpeg-preview", captureDate: null, timeZone: "UTC", scope: "Synthetic album" },
+    } } });
+    const { rerender } = render(<ProofCard item={item} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText(/JPEG preview · original remains in Apple Photos/)).toBeInTheDocument();
+    rerender(<ProofCard item={{ ...item, provenance: { ...item.provenance, import_attachment_changed: true } }} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText(/Historical import \(attachment since changed\)/)).toBeInTheDocument();
+  });
   it("shows a complete evidence attachment only when its stored path and URL exist", () => {
     render(
       <ProofCard

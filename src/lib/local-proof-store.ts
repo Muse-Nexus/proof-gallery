@@ -11,6 +11,7 @@ import {
   type ProofCategory,
 } from "./proof";
 import { LOCAL_MEDIA_TYPES, validateLocalProofMedia } from "./media";
+import { parseCompanionPackage, validateCompanionReceipt, type CompanionReceipt } from "./companion-package";
 import type { ProofSearchResult } from "./proof-api";
 
 export const LOCAL_PROOF_OWNER_ID = "local-browser-owner";
@@ -103,6 +104,7 @@ type CandidateRecord = {
   blob: Blob;
   digest: string;
   input: CandidateInput;
+  companionReceipt?: CompanionReceipt;
 };
 export type LocalProofCandidate = Omit<CandidateRecord, "blob" | "digest"> & {
   mediaUrl: string | null;
@@ -759,7 +761,9 @@ async function checkedUpdate(
         nextRecord = {
           ...next,
           provenance: { ...current.provenance, ...next.provenance,
-            ...(current.provenance.import_receipt ? { import_receipt: current.provenance.import_receipt } : {}) },
+            ...(current.provenance.import_receipt ? { import_receipt: current.provenance.import_receipt,
+              ...((replaceImage || removeExistingImage) ? { import_attachment_changed: true } : {}),
+            } : {}) },
           id: current.id,
           userId: LOCAL_PROOF_OWNER_ID,
           createdAt: current.createdAt,
@@ -1630,7 +1634,7 @@ function candidateInput(input: CandidateInput): CandidateInput {
 
 function validateCandidate(value: unknown): CandidateRecord {
   if (!isPlainObject(value)) throw new Error("Invalid local review item");
-  assertExactKeys(value, ["id", "revision", "userId", "visibility", "importedAt", "fileName", "blob", "digest", "input"], "Review item");
+  assertExactKeys(value, ["id", "revision", "userId", "visibility", "importedAt", "fileName", "blob", "digest", "input", ...(Object.hasOwn(value, "companionReceipt") ? ["companionReceipt"] : [])], "Review item");
   if (value.userId !== LOCAL_PROOF_OWNER_ID || value.visibility !== PROOF_VISIBILITY) {
     throw new Error("Review item belongs to a different owner or visibility");
   }
@@ -1644,6 +1648,7 @@ function validateCandidate(value: unknown): CandidateRecord {
     fileName: requiredString(value.fileName, "Original filename", 1024),
     blob: assertBlob(value.blob, "Review media"), digest,
     input: candidateInput(value.input as CandidateInput),
+    ...(Object.hasOwn(value, "companionReceipt") ? { companionReceipt: validateCompanionReceipt(value.companionReceipt) } : {}),
   };
 }
 
@@ -1658,6 +1663,24 @@ export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]>
   const tx = db.transaction(CANDIDATE_STORE, "readonly");
   const [rows] = await Promise.all([requestResult(tx.objectStore(CANDIDATE_STORE).getAll()), transactionComplete(tx)]);
   return rows.map(validateCandidate).sort((a, b) => b.importedAt.localeCompare(a.importedAt)).map(mapCandidate);
+}
+
+/** Companion exports are proposals only and cannot enter saved Proof here. */
+export async function stageLocalProofCompanion(blob: Blob): Promise<{ added: number; duplicates: number }> {
+  const media = await parseCompanionPackage(blob);
+  const prepared: CandidateRecord[] = [];
+  for (const { file, occurredOn, receipt } of media) {
+    const blob = file.slice(0, file.size, file.type);
+    prepared.push({
+      id: crypto.randomUUID(), revision: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
+      visibility: PROOF_VISIBILITY, importedAt: new Date().toISOString(), fileName: file.name,
+      blob, digest: await sha256(blob), companionReceipt: receipt,
+      input: { title: receipt.originalFilename.slice(0, 200), evidenceText: "", category: null,
+        occurredOn, sourceType: "photo", source: `Apple Photos — ${receipt.scope}; ${receipt.originalFilename.slice(0, 160)}${receipt.representation === "jpeg-preview" ? "; JPEG preview, original remains in Photos" : "; original photo bytes"}`,
+        tags: [], person: null, project: null },
+    });
+  }
+  return stagePreparedMedia(prepared);
 }
 
 /** Recovery path also works when a pending row cannot be decoded. */
@@ -1698,6 +1721,12 @@ export async function stageLocalProofMedia(files: readonly File[]): Promise<{
       rejected.push({ name: file.name, reason: error instanceof Error ? error.message : "Unsupported file" });
     }
   }
+  return { ...await stagePreparedMedia(prepared), rejected };
+}
+
+async function stagePreparedMedia(prepared: CandidateRecord[]): Promise<{ added: number; duplicates: number }> {
+  // Reject any batch that cannot be read back before opening a write transaction.
+  const checked = prepared.map(validateCandidate);
   const db = await openDatabase();
   const result = await new Promise<{ added: number; duplicates: number }>((resolve, reject) => {
     const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
@@ -1713,7 +1742,7 @@ export async function stageLocalProofMedia(files: readonly File[]): Promise<{
       try {
         const seen = new Set([...saved.map(row => row.imageDigest), ...pending.map(row => row.digest)]);
         let pendingBytes = pending.reduce((sum, row) => sum + row.blob.size, 0);
-        for (const candidate of prepared) {
+        for (const candidate of checked) {
           if (seen.has(candidate.digest)) { duplicates++; continue; }
           pendingBytes += candidate.blob.size;
           if (pendingBytes > MAX_BACKUP_IMAGE_BYTES || pending.length + added >= 100) {
@@ -1731,7 +1760,7 @@ export async function stageLocalProofMedia(files: readonly File[]): Promise<{
     tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Photo import failed"));
   });
   publishLocalProofChange("change");
-  return { ...result, rejected };
+  return result;
 }
 
 /** One atomic transaction prevents duplicate approval, stale edits, and half-saves. */
@@ -1781,7 +1810,8 @@ export async function resolveLocalProofCandidates(
               id: current.id, userId: LOCAL_PROOF_OWNER_ID, createdAt: timestamp, updatedAt: timestamp,
               imageBlob: verified.blob, imageName: current.fileName, imageRevision: current.revision, imageDigest: verified.digest,
               provenance: { ...fields.provenance, kind: "reviewed_media", import_receipt: {
-                method: "selected_files", original_filename: current.fileName,
+                method: current.companionReceipt ? "mac_photos_companion" : "selected_files", original_filename: current.fileName,
+                ...(current.companionReceipt ? { companion: current.companionReceipt } : {}),
                 mime_type: current.blob.type, sha256: current.digest, imported_at: current.importedAt,
                 approved_at: timestamp,
               } },
