@@ -12,7 +12,9 @@ It prepares still photos locally, preserves source/date receipts, and exports
 a private review file. In the web gallery choose **Photos & media → Import
 companion review**. Candidates still need a category and explicit approval.
 
-This is a file handoff, not automatic sync. No iCloud download or cloud AI runs.
+This is a file handoff, not automatic sync. A separate off-by-default option
+allows iCloud originals to download for one bounded batch, then switches off.
+Photos may use data/disk space beyond the retained-media cap. No cloud AI runs.
 The local app is ad-hoc signed for development; public Mac distribution still
 needs Developer ID signing and notarization. Native Android/Windows companions
 are not included; their selected-media web picker remains available.

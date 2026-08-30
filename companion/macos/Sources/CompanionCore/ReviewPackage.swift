@@ -10,7 +10,7 @@ public enum ReviewLimits {
 }
 
 public enum ReviewError: Error, LocalizedError {
-    case invalidPhoto, photoTooLarge, packageTooLarge, empty, invalidSource
+    case invalidPhoto, photoTooLarge, packageTooLarge, empty, invalidSource, readTimedOut
     public var errorDescription: String? {
         switch self {
         case .invalidPhoto: return "This photo could not be prepared locally."
@@ -18,6 +18,7 @@ public enum ReviewError: Error, LocalizedError {
         case .packageTooLarge: return "Review is limited to 50 photos and 47 MiB. Export or clear this batch first."
         case .empty: return "There are no photos to export."
         case .invalidSource: return "Photos source metadata is missing or unsupported."
+        case .readTimedOut: return "The Photos resource request timed out. Try again later."
         }
     }
 }

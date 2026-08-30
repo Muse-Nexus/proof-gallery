@@ -9,6 +9,8 @@ review-file handoff is not cross-device sync and must never bypass approval.
 Recent Photos does not require Favorites. Optional on-device OCR and metadata
 are review cues only, held in native memory and excluded from v1 exports. Never
 turn machine-read text into an exact quote or infer love, identity, or worth.
+iCloud download consent is a separate off-by-default, one-batch option, reset
+on Pause/completion. It is not permission to upload images or use cloud AI.
 Never use real personal evidence as development data or public content.
 Keep capture note-first: optional local word suggestions must respect manual
 choices and remain distinct from approval or AI interpretation. Connections use

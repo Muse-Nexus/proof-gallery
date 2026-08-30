@@ -28,10 +28,13 @@ guaranteed across development rebuilds.
 1. Click **Connect Apple Photos**, then make the macOS permission choice.
 2. Choose **Recent Photos** (no Favorites needed), Favorites, or an album and an
    earliest date (default 90 days ago). Optionally enable **Read text in these
-   images on this Mac**, then click **Start selected source**. Permission or
+   images on this Mac**. Cloud-only originals need the separate **Download missing
+   originals from iCloud for this batch** option. Click **Start selected source**. Permission or
    changing the toggle alone never starts a media scan.
 3. The app checks at most the most recent 50 still photos in that scope. Photos
-   changes trigger another check only while active. Pause removes the observer
+   changes trigger another check only in local-only watch mode. An iCloud-enabled
+   batch is one-shot, has no observer, and pauses with downloads off when done.
+   Pause removes the observer
    and cancels reads. There is no historical pagination or closed-app daemon.
    Capture dates after the current time are excluded. All prepared images stay
    visible unless you choose a review filter; none is ranked by personal value.
@@ -81,8 +84,15 @@ and enter the corrected quote yourself during gallery review.
 - Album/date selection is an app-enforced restriction within the OS grant.
   Hidden, shared-source, burst expansion, videos and Live Photo motion are not
   collected. The still component of a Live Photo may be collected.
-- Original resources must already be local. PhotoKit network access is false;
-  there is no iCloud fetch or network client/server entitlement.
+- Original resources must already be local by default. The separate iCloud
+  option allows PhotoKit to fetch missing originals for one bounded batch.
+  It is off on launch and reset on Pause, disconnect, export, and completion.
+  There is no added network client/server entitlement or direct HTTP client.
+  Downloads are through Apple Photos, not a new account connector. No upload
+  or cloud model is authorized by this option. Pause cancels the current resource
+  request; already downloaded originals may remain in Apple's cache.
+  Resource requests have a two-minute cancellation deadline and run one at a
+  time; failed/timed-out originals are skipped rather than used as partial media.
 - Original JPEG/PNG/GIF/WebP bytes pass through. HEIC/HEIF is rendered on-device
   as an orientation-correct, uncropped JPEG preview, max 4096 pixels on its long
   side, quality 0.9. It is always labelled as a derivative, including saved-card
@@ -100,6 +110,9 @@ and enter the corrected quote yourself during gallery review.
 ## Limits and review format
 
 Native input/export: 10 MiB per photo, 50 photos, 47 MiB decoded per package.
+These are retained/app-processed media limits, **not network traffic or Apple's
+cache limits**: PhotoKit can download an original before delivering its bytes.
+Downloads can use data and disk space even when an oversized image is skipped.
 The 47 MiB limit reserves metadata room beneath the browser's 64 MiB encoded
 file cap. Current browser inbox caps remain 100 candidates / 48 MiB.
 Unsupported/cloud-only/oversized photos are counted as skipped, not successful.

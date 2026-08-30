@@ -7,10 +7,26 @@ const vision = readFileSync("companion/macos/Sources/CompanionVision/LocalTextRe
 const entitlements = readFileSync("companion/macos/ProofPhotosCompanion.entitlements", "utf8");
 it("keeps the native adapter read-only and without network entitlements", () => {
   expect(native).not.toMatch(/performChanges|PHAssetChangeRequest|PHAssetCollectionChangeRequest|URLSession|URLRequest/);
-  expect(native).toContain("options.isNetworkAccessAllowed = false");
+  expect(native).toContain("@Published var allowICloudDownloads = false");
+  expect(native).toContain("options.isNetworkAccessAllowed = allowNetwork");
   expect(entitlements).toContain("com.apple.security.app-sandbox");
   expect(entitlements).toContain("com.apple.security.personal-information.photos-library");
   expect(entitlements).not.toMatch(/network.client|network.server|pictures.read|all-files/);
+});
+it("makes iCloud downloads explicit, one-shot and reset by Pause", () => {
+  expect(native).toContain('if !allowICloudDownloads && !observing');
+  expect(native).toContain('let mayDownload = allowICloudDownloads');
+  expect(native).toContain('allowNetwork: mayDownload, scanGeneration: scanGeneration');
+  expect(native).toContain('if mayDownload { self.pause() }');
+  expect(native).toContain('if !mayDownload && self.scanAgain');
+  expect(native).toContain('self.active, self.observing, !self.allowICloudDownloads');
+  expect(native).toContain('self.activeRead === stream');
+  expect(native).toContain('DispatchWorkItem { stream.timeOut() }');
+  const pause = native.slice(native.indexOf('func pause()'), native.indexOf('func disconnect()'));
+  expect(pause).toContain('allowICloudDownloads = false');
+  expect(pause).toContain('activeRead?.cancel()');
+  expect(entrypoint).toContain('Download missing originals from iCloud for this batch');
+  expect(entrypoint).toContain('Photos may cache larger originals before our size check');
 });
 it("keeps connect, bounded start, pause and lifecycle gates explicit", () => {
   expect(native.indexOf("requestAuthorization")).toBeGreaterThan(native.indexOf("func connect()"));

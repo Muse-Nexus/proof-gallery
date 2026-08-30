@@ -65,7 +65,7 @@ struct CompanionView: View {
                         Text("Loved. Valued. Connected. Accomplished.").foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(model.active ? "Watching selected source" : "Private · local only").font(.caption).foregroundStyle(.secondary)
+                    Text(model.active ? (model.allowICloudDownloads ? "Private · iCloud download batch" : "Watching selected source") : "Private · on-device review").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("Let your photos be easier to find. Choose a source; review what belongs in Proof. No image is labelled as love, identity, or accomplishment for you.")
                 if !model.connected {
@@ -85,6 +85,10 @@ struct CompanionView: View {
                     }
                     Toggle("Read text in these images on this Mac", isOn: $model.readTextLocally).disabled(model.sourceLocked)
                     Text("Optional on-device text recognition. May misread or miss words; it does not decide what is meaningful. Text stays in this companion, not the exported file. No images or text are uploaded.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Download missing originals from iCloud for this batch", isOn: $model.allowICloudDownloads)
+                        .disabled(model.active || model.scanning)
+                    Text("Off by default. Uses your Apple Photos account, data, and disk space for up to 50 selected photos. Photos may cache larger originals before our size check. Switches off after this batch or Pause. No uploads or cloud AI.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button(model.active ? "Pause" : "Start selected source") { model.active ? model.pause() : model.start() }
@@ -135,7 +139,7 @@ struct CompanionView: View {
                             .foregroundStyle(.secondary).padding()
                     }
                 }.frame(minHeight: 180)
-                Text("Still photos only, including the still part of Live Photos. Most recent 50 in the selected date range; 10 MiB each / 47 MiB per batch. No iCloud downloads, face recognition, AI uploads, or background agent when this app is closed. Original media may contain private EXIF metadata.")
+                Text("Still photos only, including the still part of Live Photos. Most recent 50 in the selected date range; retained media: 10 MiB each / 47 MiB per batch. iCloud downloads require the separate option above. No face recognition, AI uploads, or background agent when this app is closed. Original media may contain private EXIF metadata.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Prepared photos are memory-only until exported. The export is not a saved-Proof backup. Import it into the private review inbox; category and saving remain your choice.")
                     .font(.caption).foregroundStyle(.secondary)

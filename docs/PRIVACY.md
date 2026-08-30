@@ -6,7 +6,12 @@ The separate [Mac companion](COMPANION.md) can request a Photos grant and watch
 a user-selected Recent Photos/Favorites/album date scope only while active. Web permission
 does not inherit that grant. Photos are exported to an owner-selected local
 review file, then explicitly imported into pending review. No automatic saved
-Proof, cloud upload, iCloud download, or localhost server is introduced.
+Proof, cloud upload, or localhost server is introduced. iCloud downloading is
+a separate off-by-default option for one bounded batch, not a continuing grant.
+It uses Apple Photos to retrieve existing originals and switches off on Pause
+or completion. No general network entitlement is added. Apple's cache/network
+traffic can exceed our retained-media limits; downloaded originals may remain
+cached after Pause. This does not authorize cloud AI processing or uploads.
 
 An off-by-default toggle permits on-device Apple Vision text recognition within
 that selected source. It operates on a bounded preview off the main thread;

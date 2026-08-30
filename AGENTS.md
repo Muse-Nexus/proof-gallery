@@ -19,10 +19,14 @@ It exports private candidate files, not saved-Proof backups or automatic sync.
 - Native HEIC JPEG previews must retain their derivative label and original
   digest/source receipt through review, edits, and backups. Originals stay in
   Photos; import time must never replace missing Photos capture metadata.
-- No PhotoKit mutation APIs, network entitlement, iCloud download, or cloud AI.
+- No PhotoKit mutation APIs, general network entitlement, or cloud AI.
   Request Photos authorization only after Connect; read media only after the
   user chooses a bounded source and starts it. Pause/Disconnect must cancel
   active reads and observers. Closing/quitting must guard unexported candidates.
+- iCloud downloads require the separate off-by-default option and explicit Start.
+  Permit only one bounded scan, never an observer-triggered download watch;
+  reset the option on Pause/completion. Photos may cache more bytes than the
+  retained-media limit. Never infer cloud AI/upload consent from download consent.
 - Optional Vision OCR is on-device, off the UI thread, bounded, cancellable, and
   unverified. Keep it and metadata cues in native memory only; the v1 export
   must not gain machine-read quotes, inferred categories, identity, or meaning.
