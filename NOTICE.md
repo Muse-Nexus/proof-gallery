@@ -53,6 +53,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+`public/og-purpose.png` is original AI-generated decorative paper artwork for
+Proof Gallery, made with the built-in image generation tool. It contains no
+personal evidence. Its exact prompt and integrity receipt are documented in
+`docs/VISUAL_ASSETS.md`.
+
 Development-only dependencies are not distributed with the built application.
 Their exact versions are recorded in `bun.lock` and `deno.lock`; installed
 packages retain their own license files.

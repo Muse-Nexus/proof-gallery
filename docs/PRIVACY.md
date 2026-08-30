@@ -1,5 +1,28 @@
 # Privacy and threat model
 
+## Selected-media review (local mode)
+
+Local media intake adds a separate `proof_candidates` IndexedDB store (database
+version 2). Pending original photos/clips and details are unencrypted, private
+only to the browser profile, and excluded from saved-Proof search and backups.
+File selection or a selected folder is a one-time import, not a continuing grant.
+No account connector, OCR, face recognition, or AI image analysis runs.
+
+Approval validates container signatures and SHA-256 against stored bytes, checks
+revisions, and atomically inserts saved Proof and removes pending candidates.
+Duplicate bytes are skipped across both stores. Unknown dates are left blank;
+the file modification time is never substituted. Original metadata is retained.
+Local MP4/WebM clips are limited to 10 MB, played only on request through a native
+video element, with an original download when the browser cannot decode them.
+Hosted Supabase attachments remain raster-only and retain existing RLS/policies.
+
+Version-2 local backups include approved photo/video attachments and allow an
+empty note only with a real attachment; version-1 photo/text archives remain
+readable. Pending review is excluded. Removing saved Proof does not remove
+pending files: select them in the inbox and use Remove from review. Neither
+action deletes original files or downloaded backups. No data is copied from
+ChorOS automatically, and a manually authorized copy is separate, not synced.
+
 ## Boundary
 
 The public GitHub repository contains software, not anyone's evidence. There is
@@ -117,8 +140,9 @@ the private Supabase lexical path instead.
 All collection is user-initiated. Proof Gallery does not search or mine Drive,
 Dropbox, email, photos, messages, finance, ordinary memories, or other accounts.
 It does not run background collection or automatically surface evidence during
-distress. Automatic connector collection would require a later, explicit review
-inbox design before anything entered the gallery.
+distress. The selected-media review inbox does not grant connector or library
+access. Any future continuous collector must preserve that review boundary and
+add explicit source permissions, revocation, and protected credential handling.
 
 ## Decorative visual boundary
 

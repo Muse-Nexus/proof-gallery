@@ -76,7 +76,7 @@ describe("public share contract", () => {
       'rel="canonical" href="https://proof-gallery-9jn.pages.dev/"',
     );
     expect(indexHtml).toContain(
-      "https://proof-gallery-9jn.pages.dev/og.png",
+      "https://proof-gallery-9jn.pages.dev/og-purpose.png",
     );
     expect(indexHtml).toContain("No account, no app analytics");
     expect(indexHtml).not.toMatch(/no telemetry/i);

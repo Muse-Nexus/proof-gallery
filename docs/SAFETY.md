@@ -1,5 +1,10 @@
 # Safety constitution
 
+The purpose is access to concrete evidence of love, care, belonging, being
+chosen or valued, capability, and accomplishment. It is not a productivity
+ledger. An image may be the evidence without a written explanation; the system
+must not manufacture its story, identities, relationships, or emotional meaning.
+
 Never use Proof to invalidate pain, create guilt, demand optimism, or argue that
 the user should feel better. Use it only to restore evidence that depression has
 hidden.

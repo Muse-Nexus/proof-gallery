@@ -16,6 +16,8 @@ import {
   type ProofItemInput,
   type ProofSourceType,
 } from "../lib/proof";
+import { LOCAL_MEDIA_ACCEPT, validateLocalProofMedia } from "../lib/media";
+import { ProofMedia } from "./ProofMedia";
 
 type EditorResult = {
   input: ProofItemInput;
@@ -27,12 +29,14 @@ export function ProofEditor({
   item,
   busy,
   privacyLabel = "Private · only you",
+  allowLocalMedia = false,
   onClose,
   onSave,
 }: {
   item: ProofItem | null;
   busy: boolean;
   privacyLabel?: string;
+  allowLocalMedia?: boolean;
   onClose: () => void;
   onSave: (result: EditorResult) => Promise<void>;
 }) {
@@ -104,7 +108,7 @@ export function ProofEditor({
     }
 
     try {
-      await validateProofImage(selected);
+      await (allowLocalMedia ? validateLocalProofMedia(selected) : validateProofImage(selected));
       setImage(selected);
       setRemoveExistingImage(false);
     } catch (selectionError) {
@@ -175,20 +179,20 @@ export function ProofEditor({
             <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
           </label>
           <label className="full-width evidence-image-field">
-            Evidence image or screenshot <span className="optional">optional · JPEG, PNG, WebP, or GIF · 10 MB max</span>
+            {allowLocalMedia ? "Evidence photo or clip" : "Evidence image or screenshot"} <span className="optional">optional · {allowLocalMedia ? "JPEG, PNG, WebP, GIF, MP4, or WebM" : "JPEG, PNG, WebP, or GIF"} · 10 MB max</span>
             <span className="field-guidance">
-              Attach only an image that is part of this evidence. Decorative
+              Attach only media that is part of this evidence. Decorative
               landing visuals are never attached automatically.
             </span>
             <input
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept={allowLocalMedia ? LOCAL_MEDIA_ACCEPT : "image/jpeg,image/png,image/webp,image/gif"}
               onChange={selectImage}
             />
           </label>
           {image && (
             <p className="selection-status full-width" role="status">
-              Image validated and ready to save: <strong>{image.name}</strong>
+              {allowLocalMedia ? "Media" : "Image"} validated and ready to save: <strong>{image.name}</strong>
             </p>
           )}
           {existingPreview && !image && (
@@ -198,11 +202,7 @@ export function ProofEditor({
               }`}
             >
               <div className="image-preview-label">Current evidence attachment</div>
-              <img
-                src={existingPreview}
-                alt={`Current evidence image for ${item?.title ?? "this Proof"}`}
-                referrerPolicy="no-referrer"
-              />
+              {item?.mediaType?.startsWith("video/") ? <ProofMedia url={existingPreview} type={item.mediaType} title={item.title} /> : <img src={existingPreview} alt={`Current evidence image for ${item?.title ?? "this Proof"}`} referrerPolicy="no-referrer" />}
               {item?.imagePath && (
                 <label className="checkbox-row">
                   <input
@@ -243,7 +243,7 @@ export function ProofEditor({
               onChange={(event) => setEvidenceText(event.target.value)}
               rows={5}
               maxLength={20_000}
-              required
+              required={!allowLocalMedia || !(image || (item?.imagePath && !removeExistingImage))}
             />
           </label>
           <label>

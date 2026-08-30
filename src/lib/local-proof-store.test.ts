@@ -386,7 +386,7 @@ describe("versioned local backup boundary", () => {
     expect(backup.type).toBe("application/json");
     expect(document).toMatchObject({
       format: "muse-nexus-proof-gallery-backup",
-      version: 1,
+      version: 2,
       encryption: "none",
     });
     expect(document.items[0]).toMatchObject({

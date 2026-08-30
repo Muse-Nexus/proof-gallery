@@ -1,5 +1,32 @@
 # Decorative visual assets
 
+## Purpose-first social preview: `public/og-purpose.png`
+
+- Built-in image generation; one request, inspected for exact text.
+- Size: 1731 × 909. SHA-256:
+  `caa3e194f23093ecd210db135cea0f1ff346b950bda6aa8185cba92dd425fe13`.
+- Empty paper frames are decorative, not evidence. No private input images or
+  personal content were used. This replaces the earlier receipts-focused
+  social metadata; the prior asset is retained, not overwritten.
+
+Exact generation prompt:
+
+```text
+Use case: ads-marketing
+Asset type: a single finished landscape social-preview image for the free, private Proof Gallery, approximately 1200x630 pixels, 1.91:1 aspect ratio.
+Primary request: a calm, image-forward editorial composition that suggests a welcoming place to remember concrete love, care, belonging and accomplishment. This is not a productivity archive.
+Scene/backdrop: warm cream matte paper with subtle tactile grain.
+Subject: an artful arrangement of abstract, empty paper frames and softly layered paper shapes only. Keep the frames plainly abstract and empty, with no photographs or evidence inside.
+Style/medium: refined contemporary paper-collage editorial design with soft natural shadows and generous breathing room.
+Color palette: warm cream, muted terracotta, sage and soft lavender, with dark warm charcoal lettering.
+Composition/framing: wide landscape, clear visual hierarchy, balanced abstract paper arrangement, generous safe margins around the headline and subline, no clipping.
+Typography: refined light-to-medium-weight sans-serif, clean and highly legible, not bold or chunky. Set the main headline large and the subline smaller, with exact spelling and punctuation.
+Text (verbatim, exactly once each): "Proof Gallery" and "Evidence that you matter."
+Constraints: only these two text lines. No people, invented photos, messages, receipts, identifiable events, personal evidence, screens, UI controls, productivity motifs, badges, clinical claims, optimism slogans, logos or watermarks. All imagery must be obviously decorative abstract paper artwork, never represented as someone's memories or saved Proof.
+```
+
+## Existing landing decoration
+
 Decorative visuals make the public landing page warmer. They are not evidence,
 are not attached to Proof items, and never enter item data, backups, provenance,
 embeddings, or search. The UI labels every bundled decorative image **Not saved

@@ -11,6 +11,7 @@ import { AuthPanel } from "./components/AuthPanel";
 import { DecorativeVisual } from "./components/DecorativeVisual";
 import { ProofCard } from "./components/ProofCard";
 import { ProofEditor } from "./components/ProofEditor";
+import { MediaInbox } from "./components/MediaInbox";
 import {
   createProofItem,
   deleteProofItem,
@@ -99,13 +100,14 @@ function LocalStart({
 
       <section className="landing-hero" id="top" aria-labelledby="local-start-heading">
         <div className="landing-hero-copy">
-          <span className="landing-eyebrow">Concrete evidence, on your terms</span>
+          <span className="landing-eyebrow">Loved. Valued. Connected. Accomplished.</span>
           <h1 id="local-start-heading">
-            Keep the receipts your brain misplaces.
+            Evidence that you matter.
           </h1>
           <p className="landing-lede">
-            Save the actual message, finished thing, photo, receipt, award, or
-            memory—then find it again with its date and source intact.
+            Messages of care. Times you were chosen. Moments of connection.
+            Things you made happen. Keep the real words and photos, with their
+            dates and sources, for when they are hard to remember.
           </p>
           <p className="landing-constitution">
             Proof does not cancel pain. It only restores evidence you chose to
@@ -185,18 +187,18 @@ function LocalStart({
         <ol className="landing-steps">
           <li>
             <span className="step-number">01</span>
-            <h3>Save what actually happened</h3>
-            <p>Add the exact words or thing. A photo is optional. Interpretation is not required.</p>
+            <h3>Bring photos in a batch</h3>
+            <p>Choose photos, screenshots, or short clips on Mac, Android, or PC. They arrive in review, not straight into your gallery.</p>
           </li>
           <li>
             <span className="step-number">02</span>
-            <h3>Keep the receipts attached</h3>
-            <p>Date and source stay visible, so an item never floats free of its provenance.</p>
+            <h3>Keep what belongs</h3>
+            <p>Review together, choose a category, and save selected. The original file stays attached. Notes and unknown dates can stay blank.</p>
           </li>
           <li>
             <span className="step-number">03</span>
             <h3>Ask only when you want it</h3>
-            <p>Search “Show me things I finished.” Results come only from the Proof you saved.</p>
+            <p>Look for care, belonging, or accomplishment. Results come only from your saved evidence—not invented reassurance.</p>
           </li>
         </ol>
       </section>
@@ -208,7 +210,7 @@ function LocalStart({
         </div>
         <div className="privacy-points">
           <p><strong>Local means local.</strong> Saving and searching do not call a server in browser-local mode.</p>
-          <p><strong>You are the collector.</strong> No email, photo, message, finance, or memory mining.</p>
+          <p><strong>Permission comes first.</strong> Only sources you choose. Nothing silently searches your accounts or photo library.</p>
           <p><strong>Backups are your safety net.</strong> They are portable plaintext, so keep them somewhere private.</p>
         </div>
       </section>
@@ -216,13 +218,14 @@ function LocalStart({
       <section className="landing-open-source" aria-labelledby="open-source-heading">
         <figure>
           <img
-            src="/og.png"
-            alt="Proof Gallery — Keep the receipts your brain misplaces."
-            width="1200"
-            height="630"
+            src="/og-purpose.png"
+            alt="Proof Gallery — Evidence that you matter. Decorative paper frames, not saved Proof."
+            width="1731"
+            height="909"
             loading="lazy"
             decoding="async"
           />
+          <figcaption>AI-generated decorative art · not saved Proof</figcaption>
         </figure>
         <div className="open-source-copy">
           <span className="landing-eyebrow">Free + open source</span>
@@ -243,7 +246,7 @@ function LocalStart({
       <section className="landing-final-cta" aria-labelledby="final-cta-heading">
         <span aria-hidden="true">✦</span>
         <h2 id="final-cta-heading">Start with one real thing.</h2>
-        <p>A kind message. A finished project. A good day. Keep the evidence and let it remain exactly what it is.</p>
+        <p>A kind message. A moment together. Someone choosing you. Keep the evidence and let it remain exactly what it is.</p>
         <button className="primary-button landing-primary" type="button" onClick={onUseLocal}>
           Open my local gallery
         </button>
@@ -281,6 +284,8 @@ function Gallery({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editor, setEditor] = useState<ProofItem | "new" | null>(null);
+  const [showMediaInbox, setShowMediaInbox] = useState(false);
+  const [mediaDirty, setMediaDirty] = useState(false);
   const importInput = useRef<HTMLInputElement>(null);
 
   async function reload() {
@@ -509,7 +514,7 @@ function Gallery({
     const imageCount = items.filter((item) => item.imagePath).length;
     if (
       !window.confirm(
-        `Remove all ${items.length} Proof ${items.length === 1 ? "item" : "items"} and ${imageCount} ${imageCount === 1 ? "image" : "images"} from this browser profile? Download a backup first. This cannot be undone and will not remove downloaded backups or original files.`,
+        `Remove all ${items.length} saved Proof ${items.length === 1 ? "item" : "items"} and ${imageCount} attachments from this browser profile? Download a backup first. This cannot be undone. Pending review items, downloaded backups, and original files are not removed.`,
       )
     ) {
       return;
@@ -542,6 +547,7 @@ function Gallery({
               : "Private · only you"}
           </span>
           <h1>Proof Gallery</h1>
+          <p className="gallery-purpose">Loved. Valued. Connected. Accomplished. The real evidence, here when you need it.</p>
           <p>{PROOF_CONSTITUTION}</p>
         </div>
         <div className="header-actions">
@@ -555,6 +561,7 @@ function Gallery({
           </button>
           {isLocal ? (
             <>
+              <button className="secondary-button" disabled={busy} onClick={() => setShowMediaInbox(true)}>Photos & media</button>
               <button
                 className="secondary-button"
                 type="button"
@@ -586,13 +593,14 @@ function Gallery({
                 onClick={() => void clearLocalData()}
                 disabled={busy}
               >
-                Remove all local Proof
+                Remove all saved local Proof
               </button>
               {onSwitchMode && (
                 <button
                   className="text-button"
                   type="button"
                   onClick={onSwitchMode}
+                  disabled={busy || mediaDirty}
                 >
                   Use hosted account
                 </button>
@@ -614,7 +622,7 @@ function Gallery({
               </button>
             </>
           )}
-          <button className="text-button" type="button" onClick={onVisitLanding}>
+          <button className="text-button" type="button" onClick={onVisitLanding} disabled={busy || mediaDirty}>
             About
           </button>
         </div>
@@ -630,6 +638,8 @@ function Gallery({
           </span>
         </section>
       )}
+
+      {isLocal && showMediaInbox && <MediaInbox busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
 
       <section className="search-panel" aria-labelledby="search-title">
         <div>
@@ -758,7 +768,7 @@ function Gallery({
               ? "Try different literal terms or clear a filter. Results are never padded with ordinary memories."
               : hasFilters
                 ? "Try another category or tag, or show all your saved Proof."
-                : "Save one concrete message, receipt, photo, finished thing, or memory with its date and source."}
+                : "A message of care. A photo together. A moment of belonging or accomplishment. Bring the real evidence; you do not have to explain your worth."}
           </p>
           {isNarrowed ? (
             <button className="secondary-button" type="button" disabled={busy} onClick={() => {
@@ -785,6 +795,7 @@ function Gallery({
 
       {editor && (
         <ProofEditor
+          allowLocalMedia={isLocal}
           key={editor === "new" ? "new" : editor.id}
           item={editor === "new" ? null : editor}
           busy={busy}

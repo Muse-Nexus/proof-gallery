@@ -4,6 +4,7 @@ import {
   sourceTypeLabel,
   type ProofItem,
 } from "../lib/proof";
+import { ProofMedia } from "./ProofMedia";
 
 export function ProofCard({
   item,
@@ -31,13 +32,7 @@ export function ProofCard({
     >
       {hasEvidencePreview ? (
         <figure className="proof-evidence-media">
-          <img
-            src={item.imageUrl ?? undefined}
-            alt={`Evidence image for ${item.title}`}
-            className="proof-image"
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
+          <ProofMedia url={item.imageUrl!} type={item.mediaType} title={item.title} />
           <figcaption>Evidence attachment</figcaption>
         </figure>
       ) : hasEvidenceAttachment ? (
@@ -80,7 +75,7 @@ export function ProofCard({
           <span className="category-pill">{categoryLabel(item.category)}</span>
         </div>
         <h2>{item.title}</h2>
-        <blockquote>{item.evidenceText}</blockquote>
+        {item.evidenceText ? <blockquote>{item.evidenceText}</blockquote> : <p className="media-guidance">No note added. The attachment is the evidence.</p>}
         {(item.person || item.project) && (
           <dl className="proof-meta">
             {item.person && (

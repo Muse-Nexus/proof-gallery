@@ -44,6 +44,8 @@ export interface ProofItem {
   project: string | null;
   imagePath: string | null;
   imageUrl: string | null;
+  /** Present for local attachments; hosted mode remains raster-image only. */
+  mediaType?: string;
   provenance: Record<string, unknown>;
   visibility: typeof PROOF_VISIBILITY;
   createdAt: string;
