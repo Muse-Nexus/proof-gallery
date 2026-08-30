@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEv
 import {
   listLocalProofCandidates, stageLocalProofMedia, resolveLocalProofCandidates,
   subscribeToLocalProofChanges, requestLocalProofPersistence,
-  clearLocalProofCandidates,
+  clearLocalProofCandidates, stageLocalProofCompanion,
   type CandidateInput, type LocalProofCandidate,
 } from "../lib/local-proof-store";
 import { LOCAL_MEDIA_ACCEPT } from "../lib/media";
@@ -76,6 +76,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
   }, [dirtyIds.size, onDirtyStateChange]);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const companionInput = useRef<HTMLInputElement>(null);
   const [folderSupported] = useState(() => "webkitdirectory" in document.createElement("input"));
 
   async function refresh(options: { replaceIds?: string[]; discardDrafts?: boolean } = {}) {
@@ -135,6 +136,19 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
     finally { onBusyChange(false); }
   }
 
+  async function importCompanion(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file || busy) return;
+    onBusyChange(true); setError(null); setMessage(null); setRejected([]);
+    try {
+      const result = await stageLocalProofCompanion(file);
+      await requestLocalProofPersistence();
+      setMessage(`${result.added} companion photos added to review · ${result.duplicates} already here. Nothing saved as Proof yet.`);
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Companion import failed"); }
+    finally { onBusyChange(false); }
+  }
+
   async function act(action: "approve" | "skip" | "edit", one?: LocalProofCandidate, input?: CandidateInput) {
     if (busy) return;
     if (action !== "edit" && dirtyIds.size) { setError("Save or discard edited details first."); return; }
@@ -168,10 +182,13 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
         <button className="secondary-button" disabled={busy} onClick={() => folderInput.current?.click()}>Choose a folder</button>
         <input ref={folderInput} className="visually-hidden" type="file" multiple aria-label="Choose a media folder" tabIndex={-1} onChange={event => void importFiles(event)} />
       </>}
+      <button className="secondary-button" disabled={busy} onClick={() => companionInput.current?.click()}>Import companion review</button>
+      <input ref={companionInput} className="visually-hidden" type="file" accept=".json,application/json" aria-label="Import companion review file" tabIndex={-1} onChange={event => void importCompanion(event)} />
       <button className="text-button" disabled={busy} onClick={() => void clearReview()}>Clear review inbox</button>
     </div>
-    <p className="media-guidance">JPEG, PNG, WebP, GIF, MP4, or WebM · 10 MB each · up to 50 files / 48 MiB per batch. For Apple Photos, export selected photos as JPEG first; HEIC and MOV are not supported yet. Clip playback depends on your browser.</p>
-    <p className="media-guidance">Local and unencrypted, including original file metadata. No face recognition, AI analysis, library scanning, sync, or ongoing folder access. File modification dates are not treated as event dates.</p>
+    <p className="media-guidance">File picker: JPEG, PNG, WebP, GIF, MP4, or WebM · 10 MB each · up to 50 files / 48 MiB per batch. Export Apple Photos selections as JPEG, or use the Mac companion for HEIC previews. Direct HEIC and MOV imports are not supported. Clip playback depends on your browser.</p>
+    <p className="media-guidance">Local and unencrypted, including original file metadata. This website does not scan your library or keep folder access. No face recognition, AI analysis, or sync. File modification dates are not treated as event dates.</p>
+    <p className="media-guidance">The Mac Photos companion can prepare a private review file from a source you allow. Import that file here—not with Restore. This website does not inherit Photos access. Companion dates come from Photos metadata, not an inferred event; HEIC previews are labelled JPEG copies.</p>
     <p className="media-guidance"><strong>Review items are not in search or backups.</strong> Original files are untouched. Keep them until you save and back up your Proof.</p>
     {message && <p className="notice-banner" role="status">{message}</p>}
     {error && <p className="error-banner" role="alert">{error}</p>}
@@ -194,6 +211,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
         <p className="review-state">Pending review · not saved Proof</p>
         <p className="review-source">{candidate.input.source ?? "Source: MISSING"}</p>
         <p className="review-source">Occurred: {candidate.input.occurredOn ?? "MISSING"}</p>
+        {candidate.companionReceipt && <p className="review-source">{candidate.companionReceipt.representation === "jpeg-preview" ? "JPEG preview · original remains in Apple Photos" : "Original photo bytes from Apple Photos"}. Imported date source: Photos metadata. No identity or meaning inferred.</p>}
         <CandidateDetails candidate={candidate} disabled={busy} onSave={input => act("edit", candidate, input)} onDirtyChange={onDirtyChange} />
       </article>)}</div>
     </> : <p className="review-empty">No media waiting for review. Choose a few photos or screenshots to begin.</p>}

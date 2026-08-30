@@ -8,9 +8,21 @@ of whether someone is good. Receipts and finished work are examples, not the mis
 The direction is low-effort, permissioned discovery. Do not turn the temporary
 manual MVP boundary into the permanent product purpose. Equally, do not claim a
 connector, background collector, native companion, or AI interpretation exists
-until it actually works. The current intake is selected local photos and clips.
+until it actually works. The web intake is selected local media and explicit
+companion review files. The Mac companion reads a chosen album or recent
+Favorites while open, with a separate owner-triggered Photos permission flow.
+It exports private candidate files, not saved-Proof backups or automatic sync.
 
 - Keep source selection, pending review, approved Proof, and retrieval distinct.
+- Never feed companion output into Restore: that writes saved Proof. Use the
+  dedicated companion importer, which only stages pending review.
+- Native HEIC JPEG previews must retain their derivative label and original
+  digest/source receipt through review, edits, and backups. Originals stay in
+  Photos; import time must never replace missing Photos capture metadata.
+- No PhotoKit mutation APIs, network entitlement, iCloud download, or cloud AI.
+  Request Photos authorization only after Connect; read media only after the
+  user chooses a bounded source and starts it. Pause/Disconnect must cancel
+  active reads and observers. Closing/quitting must guard unexported candidates.
 - Keep candidates private and out of search until explicit review. Never bypass
   approval, even if another agent or mode is autonomous.
 - Preserve original media, literal words, sources, and known dates. Do not infer

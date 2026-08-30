@@ -1,11 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MediaInbox } from "./MediaInbox";
-import { listLocalProofCandidates, resolveLocalProofCandidates, stageLocalProofMedia, subscribeToLocalProofChanges, type LocalProofCandidate } from "../lib/local-proof-store";
+import { listLocalProofCandidates, resolveLocalProofCandidates, stageLocalProofMedia, stageLocalProofCompanion, subscribeToLocalProofChanges, type LocalProofCandidate } from "../lib/local-proof-store";
 
 vi.mock("../lib/local-proof-store", () => ({
   listLocalProofCandidates: vi.fn(), resolveLocalProofCandidates: vi.fn().mockResolvedValue(undefined),
   stageLocalProofMedia: vi.fn().mockResolvedValue({ added: 1, duplicates: 0, rejected: [] }),
+  stageLocalProofCompanion: vi.fn().mockResolvedValue({ added: 1, duplicates: 0 }),
   subscribeToLocalProofChanges: vi.fn(() => () => undefined),
   requestLocalProofPersistence: vi.fn().mockResolvedValue(false),
   clearLocalProofCandidates: vi.fn().mockResolvedValue(undefined),
@@ -32,6 +33,14 @@ it("does not save imported media until explicit review and preserves a selected 
   fireEvent.click(screen.getByRole("button", { name: "Save selected (1)" }));
   await waitFor(() => expect(resolveLocalProofCandidates).toHaveBeenCalledWith([{ candidate, input: { ...candidate.input, category: "belonging" } }], "approve"));
   expect(onSaved).toHaveBeenCalledOnce();
+});
+it("imports a companion review without approving its photos", async () => {
+  render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+  const file = new File(["synthetic"], "synthetic.proof-inbox.json", { type: "application/json" });
+  fireEvent.change(screen.getByLabelText("Import companion review file"), { target: { files: [file] } });
+  await waitFor(() => expect(stageLocalProofCompanion).toHaveBeenCalledWith(file));
+  expect(resolveLocalProofCandidates).not.toHaveBeenCalled();
+  expect(await screen.findByText(/companion photos added to review/)).toBeInTheDocument();
 });
 it("never approves older metadata while a visible draft is unsaved", async () => {
   render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);

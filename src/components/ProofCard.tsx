@@ -5,6 +5,16 @@ import {
   type ProofItem,
 } from "../lib/proof";
 import { ProofMedia } from "./ProofMedia";
+import { validateCompanionReceipt } from "../lib/companion-package";
+
+function companionLabel(provenance: ProofItem["provenance"]): string | null {
+  const receipt = provenance.import_receipt;
+  if (!receipt || typeof receipt !== "object" || !("method" in receipt) || receipt.method !== "mac_photos_companion") return null;
+  try {
+    const source = validateCompanionReceipt("companion" in receipt ? receipt.companion : null);
+    return `${provenance.import_attachment_changed ? "Historical import (attachment since changed): " : ""}${source.representation === "jpeg-preview" ? "JPEG preview · original remains in Apple Photos" : "Original photo bytes from Apple Photos"}. Imported date source: Photos metadata.`;
+  } catch { return "Companion source metadata unavailable. Do not assume this attachment is the original."; }
+}
 
 export function ProofCard({
   item,
@@ -19,6 +29,7 @@ export function ProofCard({
 }) {
   const hasEvidenceAttachment = Boolean(item.imagePath);
   const hasEvidencePreview = Boolean(item.imagePath && item.imageUrl);
+  const importedMediaLabel = companionLabel(item.provenance);
 
   return (
     <article
@@ -70,6 +81,7 @@ export function ProofCard({
           </dd>
         </div>
       </dl>
+      {importedMediaLabel && <p className="media-guidance">{importedMediaLabel}</p>}
       <div className="proof-card-body">
         <div className="card-heading-row">
           <span className="category-pill">{categoryLabel(item.category)}</span>

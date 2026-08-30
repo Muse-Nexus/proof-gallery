@@ -5,5 +5,8 @@ dist/
 .supabase-test.env
 .DS_Store
 coverage/
+companion/macos/.build/
+*.proof-inbox.json
+proof-gallery-backup-*.json
 supabase/.branches/
 supabase/.temp/
