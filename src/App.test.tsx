@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  deleteLocalProofItem,
   importLocalProofBackup,
   listLocalProofItems,
   releaseLocalProofImageUrls,
@@ -173,6 +174,64 @@ describe("standalone local storage boundary", () => {
         "Restored 2 saved Proof and 0 pending review items. Identical existing items were left unchanged.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps saved Proof when deletion is cancelled", async () => {
+    const item = localItem();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: item.title });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      "Delete this Proof item? This cannot be undone.",
+    );
+    expect(deleteLocalProofItem).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
+    expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
+    expect(screen.queryByText("Proof deleted.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Proof" })).toBeEnabled();
+  });
+
+  it("clears the old deletion notice after successfully restoring the deleted Proof", async () => {
+    const item = localItem();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listLocalProofItems)
+      .mockResolvedValueOnce([item])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([item]);
+    vi.mocked(deleteLocalProofItem).mockResolvedValueOnce({ cleanupFailed: false });
+    vi.mocked(importLocalProofBackup).mockResolvedValueOnce({
+      imported: 1,
+      importedCount: 1,
+      items: [item],
+      pendingImported: 0,
+    });
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: item.title });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+    expect(screen.getByText("Proof deleted.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.change(screen.getByLabelText("Backup file"), {
+      target: {
+        files: [new File(["synthetic backup"], "proof-backup.json", { type: "application/json" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and restore" }));
+
+    await screen.findByText(
+      "Restored 1 saved Proof and 0 pending review items. Identical existing items were left unchanged.",
+    );
+    expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
+    expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
+    expect(screen.queryByText("Proof deleted.")).not.toBeInTheDocument();
   });
 
   it("lets a returning local user revisit the shareable landing page", async () => {

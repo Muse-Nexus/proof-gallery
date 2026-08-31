@@ -587,7 +587,7 @@ function Gallery({
         </section>
       )}
 
-      {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { clearSearch(); await reload(); }} />}
+      {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { setNotice(null); clearSearch(); await reload(); }} />}
       {isLocal && showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); }} />}
       {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
 

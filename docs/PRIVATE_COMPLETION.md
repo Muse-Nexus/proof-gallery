@@ -86,6 +86,25 @@ DMG but refuses to notarize without a separate explicit flag and keychain profil
 Do not label the local development build a public signed release. Browser pairing
 permission/CSP checks and signed-app testing remain release gates.
 
+## Recovery verification
+
+Use only synthetic evidence in a separate non-production browser origin/profile.
+Check wrong-passphrase rejection and **Cancel** before approving a restore: neither
+may write saved or pending items, and controls must become usable again. A valid
+archive must preserve exact saved fields and pending media/notes without approving
+them or making them searchable. Conflicts must leave both stores unchanged and
+show an error; cancelling Delete must retain the saved item. Component regression
+tests cover these failure and cancellation guards alongside the atomic-store tests.
+Successful restore also clears previous gallery notices, so a recovered item cannot
+remain paired with a stale deletion message.
+
+An encryption test or “download prepared” message is not a file-recovery receipt.
+Verify the actual downloaded file restores before relying on it. A prepared
+synthetic fixture can test the restore UI separately, but does not prove the
+browser's download completed. Keep production-origin pairing/permission checks
+separate from local-origin UI checks; never weaken the Origin allowlist or browser
+security to make a test pass.
+
 References: [WebCrypto AES-GCM](https://www.w3.org/TR/2017/REC-WebCryptoAPI-20170126/#aes-gcm),
 [OWASP PBKDF2](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#pbkdf2),
 [Apple embeddings](https://developer.apple.com/documentation/naturallanguage/nlembedding),
