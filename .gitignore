@@ -8,5 +8,6 @@ coverage/
 companion/macos/.build/
 *.proof-inbox.json
 proof-gallery-backup-*.json
+*.proof
 supabase/.branches/
 supabase/.temp/

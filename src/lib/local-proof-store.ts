@@ -13,6 +13,7 @@ import {
 import { LOCAL_MEDIA_TYPES, validateLocalProofMedia } from "./media";
 import { parseCompanionPackage, validateCompanionReceipt, type CompanionReceipt } from "./companion-package";
 import type { ProofSearchResult } from "./proof-api";
+import { MAX_FULL_BACKUP_BYTES } from "./encrypted-backup";
 
 export const LOCAL_PROOF_OWNER_ID = "local-browser-owner";
 
@@ -91,6 +92,7 @@ export type LocalProofImportResult = {
   imported: number;
   importedCount: number;
   items: ProofItem[];
+  pendingImported: number;
 };
 
 export type CandidateInput = Omit<ProofItemInput, "category"> & { category: ProofCategory | null };
@@ -1115,9 +1117,7 @@ function base64ToBytes(value: unknown): Uint8Array {
     typeof value !== "string" ||
     value.length === 0 ||
     value.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value,
-    )
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(value)
   ) {
     throw new Error("Proof backup image data is not canonical base64");
   }
@@ -1438,8 +1438,8 @@ async function importedRecord(
   };
 }
 
-async function parseBackup(blob: Blob): Promise<LocalProofRecord[]> {
-  if (blob.size > MAX_BACKUP_BYTES) {
+async function parseBackup(blob: Blob): Promise<{ records: LocalProofRecord[]; candidates: CandidateRecord[] }> {
+  if (blob.size > MAX_FULL_BACKUP_BYTES) {
     throw new Error("Proof backup is too large to import safely");
   }
   let value: unknown;
@@ -1451,15 +1451,16 @@ async function parseBackup(blob: Blob): Promise<LocalProofRecord[]> {
   if (!isPlainObject(value)) throw new Error("Proof backup must be an object");
   assertExactKeys(
     value,
-    ["format", "version", "encryption", "exportedAt", "items"],
+    ["format", "version", "encryption", "exportedAt", "items", ...(value.version === 3 ? ["pending"] : [])],
     "Proof backup",
   );
-  if (value.format !== BACKUP_FORMAT || (value.version !== 1 && value.version !== BACKUP_VERSION)) {
+  if (value.format !== BACKUP_FORMAT || ![1, 2, 3].includes(value.version as number)) {
     throw new Error("Proof backup format or version is unsupported");
   }
   if (value.encryption !== "none") {
     throw new Error("This importer accepts only the declared unencrypted format");
   }
+  if (value.version !== 3 && blob.size > MAX_BACKUP_BYTES) throw new Error("Legacy backup is too large.");
   isoTimestamp(value.exportedAt, "Export timestamp");
   if (!Array.isArray(value.items) || value.items.length > MAX_BACKUP_ITEMS) {
     throw new Error("Proof backup contains an invalid number of items");
@@ -1490,7 +1491,30 @@ async function parseBackup(blob: Blob): Promise<LocalProofRecord[]> {
   for (const validated of validatedItems) {
     records.push(await importedRecord(validated));
   }
-  return records;
+  const candidates: CandidateRecord[] = [];
+  if (value.version === 3) {
+    if (!Array.isArray(value.pending) || value.pending.length > 100) throw new Error("Invalid pending backup count.");
+    let bytes = 0;
+    for (const entry of value.pending) {
+      if (!isPlainObject(entry)) throw new Error("Invalid pending backup item.");
+      assertExactKeys(entry, ["id", "revision", "userId", "visibility", "importedAt", "fileName", "digest", "input", "media", ...(Object.hasOwn(entry, "companionReceipt") ? ["companionReceipt"] : [])], "Pending backup item");
+      const media = validateBackupImageDeclaration(entry.media);
+      if (!media) throw new Error("Pending media is missing.");
+      bytes += media.size;
+      if (bytes > MAX_BACKUP_IMAGE_BYTES) throw new Error("Pending media exceeds 48 MiB.");
+      const data = base64ToBytes(media.base64);
+      const mediaBlob = new Blob([new Uint8Array(data)], { type: media.type });
+      await validateLocalProofMedia(new File([mediaBlob], media.name, { type: media.type }));
+      if (data.length !== media.size || await sha256(mediaBlob) !== media.integritySha256 || entry.digest !== media.integritySha256 || entry.fileName !== media.name) throw new Error("Pending media integrity check failed.");
+      const { media: _media, ...rest } = entry;
+      const candidate = validateCandidate({ ...rest, blob: mediaBlob });
+      if (candidate.companionReceipt && ((candidate.companionReceipt.representation === "original" && candidate.companionReceipt.originalSha256 !== candidate.digest) || (candidate.companionReceipt.representation === "jpeg-preview" && mediaBlob.type !== "image/jpeg"))) throw new Error("Companion receipt does not match the restored media.");
+      if (ids.has(candidate.id)) throw new Error("Proof backup contains duplicate ids.");
+      ids.add(candidate.id);
+      candidates.push(candidate);
+    }
+  }
+  return { records, candidates };
 }
 
 function stableJson(value: unknown): string {
@@ -1543,17 +1567,26 @@ function recordsAreIdentical(
 
 async function insertNonConflictingRecords(
   records: LocalProofRecord[],
-): Promise<LocalProofRecord[]> {
-  if (records.length === 0) return [];
+  candidates: CandidateRecord[],
+): Promise<{ inserted: LocalProofRecord[]; pendingImported: number }> {
   const database = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const transaction = database.transaction(ITEM_STORE, "readwrite");
+    const transaction = database.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
     const store = transaction.objectStore(ITEM_STORE);
+    const pendingStore = transaction.objectStore(CANDIDATE_STORE);
     const inserted: LocalProofRecord[] = [];
+    let pendingImported = 0;
     let explicitError: unknown = null;
 
     for (const record of records) {
+      const cross = pendingStore.get(record.id);
+      cross.onsuccess = () => {
+        if (cross.result !== undefined && !explicitError) {
+          explicitError = new Error("Backup conflicts with a pending review item; nothing was imported.");
+          transaction.abort();
+        }
+      };
       const request = store.get(record.id);
       request.onsuccess = () => {
         if (explicitError) return;
@@ -1579,7 +1612,26 @@ async function insertNonConflictingRecords(
       };
     }
 
-    transaction.oncomplete = () => resolve(inserted);
+    // Read the complete pending store to enforce limits across existing and restored data.
+    const allPending = pendingStore.getAll();
+    allPending.onsuccess = () => {
+      if (explicitError) return;
+      try {
+        const current = new Map(allPending.result.map((row) => { const item = validateCandidate(row); return [item.id, item]; }));
+        for (const candidate of candidates) {
+          const existing = current.get(candidate.id);
+          if (existing && stableJson(canonicalCandidate(existing)) !== stableJson(canonicalCandidate(candidate))) throw new Error("Backup conflicts with existing review details; nothing was imported.");
+          if (!existing) { current.set(candidate.id, candidate); pendingImported++; pendingStore.add(candidate); }
+          const cross = store.get(candidate.id);
+          cross.onsuccess = () => {
+            if (cross.result !== undefined && !explicitError) { explicitError = new Error("Backup conflicts with saved Proof; nothing was imported."); transaction.abort(); }
+          };
+        }
+        if (current.size > 100 || [...current.values()].reduce((sum, item) => sum + item.blob.size, 0) > MAX_BACKUP_IMAGE_BYTES) throw new Error("Restored review inbox would exceed 100 items or 48 MiB; nothing was imported.");
+      } catch (error) { explicitError = error; transaction.abort(); }
+    };
+
+    transaction.oncomplete = () => resolve({ inserted, pendingImported });
     transaction.onerror = () =>
       reject(
         explicitError ??
@@ -1598,8 +1650,8 @@ async function insertNonConflictingRecords(
 export async function importLocalProofBackup(
   blob: Blob,
 ): Promise<LocalProofImportResult> {
-  const records = await parseBackup(blob);
-  const inserted = await insertNonConflictingRecords(records);
+  const { records, candidates } = await parseBackup(blob);
+  const { inserted, pendingImported } = await insertNonConflictingRecords(records, candidates);
   const items = sortProofItems(
     inserted.map((record) => mapRecord(record)),
     "newest",
@@ -1609,6 +1661,7 @@ export async function importLocalProofBackup(
     imported: inserted.length,
     importedCount: inserted.length,
     items,
+    pendingImported,
   };
 }
 
@@ -1639,6 +1692,8 @@ function validateCandidate(value: unknown): CandidateRecord {
     throw new Error("Review item belongs to a different owner or visibility");
   }
   if (!isPlainObject(value.input)) throw new Error("Invalid review details");
+  assertExactKeys(value.input, ["title", "evidenceText", "occurredOn", "category", "sourceType", "source", "tags", "person", "project"], "Review details");
+  if (value.input.category !== null && !isProofCategory(value.input.category)) throw new Error("Invalid review category");
   const digest = requiredString(value.digest, "Media digest", 64);
   if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error("Invalid media digest");
   return {
@@ -1658,6 +1713,44 @@ function mapCandidate(candidate: CandidateRecord): LocalProofCandidate {
     mediaUrl: imageUrl({ id: candidate.id, imageBlob: blob, imageRevision: candidate.revision }) };
 }
 
+function canonicalCandidate(candidate: CandidateRecord) {
+  const { blob, ...rest } = candidate;
+  return { ...rest, media: { type: blob.type, size: blob.size } };
+}
+
+/** One consistent snapshot, including saved pending notes; never transient UI drafts. */
+export async function exportLocalProofFullBackup(): Promise<Blob> {
+  const db = await openDatabase();
+  const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readonly");
+  const [savedRows, pendingRows] = await Promise.all([
+    requestResult(tx.objectStore(ITEM_STORE).getAll()),
+    requestResult(tx.objectStore(CANDIDATE_STORE).getAll()), transactionComplete(tx),
+  ]);
+  const records = savedRows.map(validateStoredRecord).sort((a, b) => a.id.localeCompare(b.id));
+  const candidates = pendingRows.map(validateCandidate).sort((a, b) => a.id.localeCompare(b.id));
+  if (records.length > MAX_BACKUP_ITEMS || candidates.length > 100 ||
+      records.reduce((sum, item) => sum + (item.imageBlob?.size ?? 0), 0) > MAX_BACKUP_IMAGE_BYTES ||
+      candidates.reduce((sum, item) => sum + item.blob.size, 0) > MAX_BACKUP_IMAGE_BYTES) {
+    throw new Error("Backup exceeds safe limits: 48 MiB saved media and 48 MiB pending media.");
+  }
+  const items: BackupItem[] = [];
+  for (const record of records) {
+    const body = backupItemBody(record, await backupImage(record));
+    items.push({ ...body, integrity: await itemIntegrityReceipt(body) });
+  }
+  const pending = [];
+  for (const candidate of candidates) {
+    const { blob, ...rest } = candidate;
+    if (await sha256(blob) !== candidate.digest) throw new Error("Pending media integrity check failed.");
+    pending.push({ ...rest, media: { name: candidate.fileName, type: blob.type, size: blob.size,
+      integritySha256: candidate.digest, base64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) } });
+  }
+  const result = new Blob([JSON.stringify({ format: BACKUP_FORMAT, version: 3, encryption: "none",
+    exportedAt: new Date().toISOString(), items, pending })], { type: "application/json" });
+  if (result.size > MAX_FULL_BACKUP_BYTES) throw new Error("Full backup exceeds the 144 MiB limit.");
+  return result;
+}
+
 export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]> {
   const db = await openDatabase();
   const tx = db.transaction(CANDIDATE_STORE, "readonly");
@@ -1666,10 +1759,12 @@ export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]>
 }
 
 /** Companion exports are proposals only and cannot enter saved Proof here. */
-export async function stageLocalProofCompanion(blob: Blob): Promise<{ added: number; duplicates: number }> {
+export async function stageLocalProofCompanion(blob: Blob, signal?: AbortSignal): Promise<{ added: number; duplicates: number }> {
+  signal?.throwIfAborted();
   const media = await parseCompanionPackage(blob);
   const prepared: CandidateRecord[] = [];
   for (const { file, occurredOn, receipt } of media) {
+    signal?.throwIfAborted();
     const blob = file.slice(0, file.size, file.type);
     prepared.push({
       id: crypto.randomUUID(), revision: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
@@ -1680,7 +1775,7 @@ export async function stageLocalProofCompanion(blob: Blob): Promise<{ added: num
         tags: [], person: null, project: null },
     });
   }
-  return stagePreparedMedia(prepared);
+  return stagePreparedMedia(prepared, signal);
 }
 
 /** Recovery path also works when a pending row cannot be decoded. */
@@ -1724,10 +1819,11 @@ export async function stageLocalProofMedia(files: readonly File[]): Promise<{
   return { ...await stagePreparedMedia(prepared), rejected };
 }
 
-async function stagePreparedMedia(prepared: CandidateRecord[]): Promise<{ added: number; duplicates: number }> {
+async function stagePreparedMedia(prepared: CandidateRecord[], signal?: AbortSignal): Promise<{ added: number; duplicates: number }> {
   // Reject any batch that cannot be read back before opening a write transaction.
   const checked = prepared.map(validateCandidate);
   const db = await openDatabase();
+  signal?.throwIfAborted();
   const result = await new Promise<{ added: number; duplicates: number }>((resolve, reject) => {
     const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
     const savedRequest = tx.objectStore(ITEM_STORE).getAll();
@@ -1737,6 +1833,8 @@ async function stagePreparedMedia(prepared: CandidateRecord[]): Promise<{ added:
     let added = 0;
     let duplicates = 0;
     let failure: unknown;
+    const cancel = () => { failure = new DOMException("Import canceled before commit", "AbortError"); try { tx.abort(); } catch { /* Already committed; cannot retract. */ } };
+    signal?.addEventListener("abort", cancel, { once: true });
     const insert = () => {
       if (!saved || !pending) return;
       try {
@@ -1756,8 +1854,8 @@ async function stagePreparedMedia(prepared: CandidateRecord[]): Promise<{ added:
     };
     savedRequest.onsuccess = () => { try { saved = savedRequest.result.map(validateStoredRecord); insert(); } catch (error) { failure = error; tx.abort(); } };
     pendingRequest.onsuccess = () => { try { pending = pendingRequest.result.map(validateCandidate); insert(); } catch (error) { failure = error; tx.abort(); } };
-    tx.oncomplete = () => resolve({ added, duplicates });
-    tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Photo import failed"));
+    tx.oncomplete = () => { signal?.removeEventListener("abort", cancel); resolve({ added, duplicates }); };
+    tx.onerror = tx.onabort = () => { signal?.removeEventListener("abort", cancel); reject(failure ?? tx.error ?? new Error("Photo import failed")); };
   });
   publishLocalProofChange("change");
   return result;

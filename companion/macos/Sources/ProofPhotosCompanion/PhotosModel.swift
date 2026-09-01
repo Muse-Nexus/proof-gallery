@@ -3,6 +3,7 @@ import Photos
 import ImageIO
 import UniformTypeIdentifiers
 import CompanionCore
+import CompanionVision
 
 struct PhotoAlbum: Identifiable { let id: String; let title: String }
 
@@ -30,6 +31,12 @@ private final class ResourceRead: @unchecked Sendable {
         lock.lock(); failure = CancellationError(); data.removeAll(); let id = requestID; lock.unlock()
         if let id { PHAssetResourceManager.default().cancelDataRequest(id) }
     }
+    func timeOut() {
+        lock.lock()
+        if failure == nil { failure = ReviewError.readTimedOut; data.removeAll() }
+        let id = requestID; lock.unlock()
+        if let id { PHAssetResourceManager.default().cancelDataRequest(id) }
+    }
     func finish(_ error: Error?) -> Result<Data, Error> {
         lock.lock(); defer { lock.unlock() }
         if let error = failure ?? error { return .failure(error) }
@@ -46,19 +53,30 @@ private final class ResourceRead: @unchecked Sendable {
     @Published var source = ""
     @Published var since = Calendar.current.date(byAdding: .day, value: -90, to: Date())!
     @Published var photos: [ReviewPhoto] = []
+    @Published var contexts: [String: LocalPhotoContext] = [:]
+    @Published var readTextLocally = false
+    @Published var allowICloudDownloads = false
     @Published var message = "Connect only when you are ready to choose a photo source."
     @Published var skipped = 0
+    @Published var skipReasons: [String: Int] = [:]
     @Published var exported = false
+    @Published var pairingCode = ""
+    private let bridge = LocalBridge()
+    private var bridgeGeneration = UUID()
     private var generation = 0
     private var seen = Set<String>()
     private var task: Task<Void, Never>?
     private var activeRead: ResourceRead?
+    private var activeTextRead: LocalTextRead?
     private var scanAgain = false
     private var observing = false
     private var lastScopeKey: String?
 
     var sourceLocked: Bool { active || scanning || !photos.isEmpty }
     var preparedBytes: Int { photos.reduce(0) { $0 + $1.byteCount } }
+    var skipSummary: String {
+        skipReasons.keys.sorted().map { "\(skipReasons[$0] ?? 0) \($0)" }.joined(separator: " · ")
+    }
 
     func connect() {
         guard !connecting, !connected else { return }
@@ -90,39 +108,68 @@ private final class ResourceRead: @unchecked Sendable {
 
     func start() {
         guard connected, !source.isEmpty, !active, !scanning else { return }
-        let scopeKey = source + "|" + dayLabel(since)
+        let scopeKey = source + "|" + dayLabel(since) + "|text:\(readTextLocally)"
         if lastScopeKey != scopeKey { seen = []; lastScopeKey = scopeKey }
-        if !observing { PHPhotoLibrary.shared().register(self); observing = true }
-        active = true; message = "Watching only the selected source while this app is open."
+        // Download consent is for one bounded scan, never a background watch.
+        if !allowICloudDownloads && !observing { PHPhotoLibrary.shared().register(self); observing = true }
+        active = true
+        message = allowICloudDownloads ? "Preparing one selected batch. iCloud downloads allowed; processing stays on this Mac." : "Watching only the selected source while this app is open."
         scan()
     }
 
     func pause() {
+        stopBridge()
         if observing { PHPhotoLibrary.shared().unregisterChangeObserver(self); observing = false }
         active = false; generation += 1; scanAgain = false
         activeRead?.cancel(); activeRead = nil; task?.cancel(); task = nil; scanning = false
+        activeTextRead?.cancel(); activeTextRead = nil
+        allowICloudDownloads = false
         message = "Paused. Prepared photos remain in memory until you export or clear them."
+    }
+
+    func stopBridge() {
+        bridgeGeneration = UUID(); pairingCode = ""; bridge.stop()
+    }
+
+    func startBridge() {
+        pause()
+        let generation = bridgeGeneration
+        let snapshot = photos
+        message = "Preparing a five-minute same-Mac connection. No internet upload."
+        Task {
+            do {
+                let data = try await Task.detached { snapshot.isEmpty ? nil : try ReviewPackage(items: snapshot).encoded() }.value
+                guard bridgeGeneration == generation else { return }
+                bridge.start(review: data) { [weak self] code in
+                    Task { @MainActor in
+                        guard let self, self.bridgeGeneration == generation else { return }
+                        self.pairingCode = code ?? ""
+                        self.message = code == nil ? "Connection stopped or expired. Start again to pair." : "Paste the pairing code into Proof Gallery → Connect this Mac. Only prepared photos can transfer; text tools run on this Mac. Expires in five minutes."
+                    }
+                }
+            } catch { message = "Could not prepare this connection. The review-file export is still available." }
+        }
     }
 
     func disconnect() {
         pause()
-        connected = false; source = ""; albums = []; photos = []; seen = []; lastScopeKey = nil; exported = false; skipped = 0
+        connected = false; source = ""; albums = []; photos = []; contexts = [:]; seen = []; lastScopeKey = nil; exported = false; skipped = 0; skipReasons = [:]
         message = "Disconnected and in-memory photos cleared. Revoke the OS grant in System Settings → Privacy & Security → Photos. Exported files and saved Proof are unchanged."
     }
 
     func clearPrepared() {
-        pause(); photos = []; exported = false; skipped = 0
+        pause(); photos = []; contexts = [:]; exported = false; skipped = 0; skipReasons = [:]
         message = "Prepared photos cleared. This session remembers photos already gathered from the same source. The scan is the most recent 50, not a full-library import."
     }
 
     func removePrepared(_ id: String) {
-        pause(); photos.removeAll { $0.id == id }; exported = false
+        pause(); photos.removeAll { $0.id == id }; contexts.removeValue(forKey: id); exported = false
         message = "Removed from this batch only. Original Photos and exported files are unchanged."
     }
 
     nonisolated func photoLibraryDidChange(_ changeInstance: PHChange) {
         Task { @MainActor [weak self] in
-            guard let self, self.active else { return }
+            guard let self, self.active, self.observing, !self.allowICloudDownloads else { return }
             if self.scanning { self.scanAgain = true } else { self.scan() }
         }
     }
@@ -135,20 +182,24 @@ private final class ResourceRead: @unchecked Sendable {
             return
         }
         let selectedSource = source
+        let shouldReadText = readTextLocally
+        let mayDownload = allowICloudDownloads
         let earliest = Calendar.current.startOfDay(for: since)
         let options = PHFetchOptions()
         options.fetchLimit = ReviewLimits.photoCount
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         options.includeHiddenAssets = false; options.includeAllBurstAssets = false
         options.includeAssetSourceTypes = .typeUserLibrary
-        var predicates = [NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue), NSPredicate(format: "creationDate >= %@", earliest as NSDate)]
+        var predicates = [NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue),
+                          NSPredicate(format: "creationDate >= %@", earliest as NSDate),
+                          NSPredicate(format: "creationDate <= %@", Date() as NSDate)]
         let assets: PHFetchResult<PHAsset>
         let scope: String
-        if selectedSource == "favorites" {
-            predicates.append(NSPredicate(format: "favorite == YES"))
+        if selectedSource == "favorites" || selectedSource == "recent" {
+            if selectedSource == "favorites" { predicates.append(NSPredicate(format: "favorite == YES")) }
             options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
             assets = PHAsset.fetchAssets(with: options)
-            scope = "Favorites since \(dayLabel(earliest))"
+            scope = "\(selectedSource == "recent" ? "Recent photos" : "Favorites") since \(dayLabel(earliest))"
         } else {
             guard let album = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [selectedSource], options: nil).firstObject else {
                 pause(); message = "The selected album is no longer available. Clear this batch to choose another source."; return
@@ -158,16 +209,19 @@ private final class ResourceRead: @unchecked Sendable {
             scope = "Album \(String((album.localizedTitle ?? "Untitled").prefix(100))) since \(dayLabel(earliest))"
         }
         let batch = (0..<assets.count).map { assets.object(at: $0) }.filter { !seen.contains($0.localIdentifier) }
-        scanning = true; skipped = 0; scanAgain = false
+        scanning = true; skipped = 0; skipReasons = [:]; scanAgain = false
         let scanGeneration = generation
         task = Task { [weak self] in
             guard let self else { return }
-            for asset in batch {
+            for (index, asset) in batch.enumerated() {
                 guard !Task.isCancelled, self.active, self.generation == scanGeneration else { return }
+                let readPermission = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                guard readPermission == .authorized || readPermission == .limited else { self.disconnect(); return }
                 if self.photos.count >= ReviewLimits.photoCount { self.pause(); self.message = "Review is full. Export and clear this batch before starting again."; return }
                 do {
                     guard let resource = PHAssetResource.assetResources(for: asset).first(where: { $0.type == .photo }) else { throw ReviewError.invalidPhoto }
-                    let original = try await self.read(resource)
+                    self.message = "Preparing photo \(index + 1) of \(batch.count)\(mayDownload ? " · iCloud downloads allowed" : " · local originals only")."
+                    let original = try await self.read(resource, allowNetwork: mayDownload, scanGeneration: scanGeneration, position: index + 1, total: batch.count)
                     guard !Task.isCancelled, self.active, self.generation == scanGeneration else { return }
                     let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
                     guard status == .authorized || status == .limited else { self.disconnect(); return }
@@ -179,26 +233,85 @@ private final class ResourceRead: @unchecked Sendable {
                     guard self.preparedBytes + photo.byteCount <= ReviewLimits.packageBytes else {
                         self.pause(); self.message = "Review reached its 47 MiB limit. Export and clear this batch first."; return
                     }
+                    var recognizedText = ""
+                    var textStatus: LocalPhotoContext.TextStatus = .off
+                    if shouldReadText {
+                        self.message = "Reading text on this Mac · \(self.photos.count + 1) of up to \(batch.count). Nothing uploaded or saved as Proof."
+                        let textRead = LocalTextRead(); self.activeTextRead = textRead
+                        do {
+                            recognizedText = try await textRead.read(rendition.data)
+                            textStatus = recognizedText.isEmpty ? .notFound : .found
+                        } catch { textStatus = .unavailable }
+                        // Best-effort Vision cancellation alone is not a write gate.
+                        guard !Task.isCancelled, self.active, self.generation == scanGeneration else { return }
+                        self.activeTextRead = nil
+                        let currentStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                        guard currentStatus == .authorized || currentStatus == .limited else { self.disconnect(); return }
+                    }
                     self.seen.insert(asset.localIdentifier)
-                    if !self.photos.contains(where: { $0.sha256 == photo.sha256 }) { self.photos.append(photo); self.exported = false }
+                    if !self.photos.contains(where: { $0.sha256 == photo.sha256 }) {
+                        self.contexts[photo.id] = LocalPhotoContext(pixelWidth: asset.pixelWidth, pixelHeight: asset.pixelHeight,
+                            isScreenshot: asset.mediaSubtypes.contains(.photoScreenshot),
+                            isLivePhoto: asset.mediaSubtypes.contains(.photoLive), isFavorite: asset.isFavorite,
+                            textStatus: textStatus, recognizedText: recognizedText)
+                        self.photos.append(photo); self.exported = false
+                    }
                 } catch {
                     guard self.generation == scanGeneration, self.active, !Task.isCancelled else { return }
                     self.skipped += 1
+                    self.skipReasons[self.skipReason(error, downloadAllowed: mayDownload), default: 0] += 1
                 }
             }
             guard self.generation == scanGeneration else { return }
-            self.scanning = false; self.activeRead = nil; self.task = nil
-            self.message = "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan (cloud-only, unsupported, or too large). Nothing saved as Proof."
-            if self.scanAgain { self.scan() }
+            self.scanning = false; self.activeRead = nil; self.activeTextRead = nil; self.task = nil
+            if mayDownload { self.pause() }
+            self.message = "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan. Nothing saved as Proof."
+                + (mayDownload ? " Download batch finished and paused; download permission switched off." : "")
+            if !mayDownload && self.scanAgain { self.scan() }
         }
     }
 
-    private func read(_ resource: PHAssetResource) async throws -> Data {
+    private func skipReason(_ error: Error, downloadAllowed: Bool) -> String {
+        if let error = error as? ReviewError {
+            switch error {
+            case .photoTooLarge: return "over 10 MiB"
+            case .invalidSource: return "unsupported source metadata"
+            case .readTimedOut: return "resource request timed out"
+            default: return "unsupported or unavailable image"
+            }
+        }
+        let error = error as NSError
+        guard error.domain == PHPhotosErrorDomain else { return "local read failed" }
+        switch error.code {
+        case PHPhotosError.Code.networkAccessRequired.rawValue:
+            return downloadAllowed ? "iCloud download unavailable" : "require an iCloud download (not allowed)"
+        case PHPhotosError.Code.accessUserDenied.rawValue, PHPhotosError.Code.accessRestricted.rawValue: return "Photos access denied or restricted"
+        case PHPhotosError.Code.libraryVolumeOffline.rawValue: return "library volume offline"
+        case PHPhotosError.Code.missingResource.rawValue: return "original resource missing"
+        default: return "Photos read failed (code \(error.code))"
+        }
+        // Never display error.userInfo/description: these may contain private paths or identifiers.
+    }
+
+    private func read(_ resource: PHAssetResource, allowNetwork: Bool, scanGeneration: Int, position: Int, total: Int) async throws -> Data {
         let stream = ResourceRead(); activeRead = stream
-        let options = PHAssetResourceRequestOptions(); options.isNetworkAccessAllowed = false
+        let options = PHAssetResourceRequestOptions(); options.isNetworkAccessAllowed = allowNetwork
+        if allowNetwork {
+            options.progressHandler = { [weak self] progress in
+                Task { @MainActor in
+                    guard let self, self.active, self.scanning, self.generation == scanGeneration, self.activeRead === stream else { return }
+                    guard progress.isFinite else { return }
+                    self.message = "Preparing photo \(position) of \(total) · iCloud download \(Int(min(1, max(0, progress)) * 100))%. Processing stays on this Mac."
+                }
+            }
+        }
         return try await withCheckedThrowingContinuation { continuation in
+            let deadline = DispatchWorkItem { stream.timeOut() }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 120, execute: deadline)
             let requestID = PHAssetResourceManager.default().requestData(for: resource, options: options,
-                dataReceivedHandler: { stream.append($0) }, completionHandler: { continuation.resume(with: stream.finish($0)) })
+                dataReceivedHandler: { stream.append($0) }, completionHandler: {
+                    deadline.cancel(); continuation.resume(with: stream.finish($0))
+                })
             stream.attach(requestID)
         }
     }
