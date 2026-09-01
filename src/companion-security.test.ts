@@ -5,6 +5,8 @@ const native = readFileSync("companion/macos/Sources/ProofPhotosCompanion/Photos
 const entrypoint = readFileSync("companion/macos/Sources/ProofPhotosCompanion/ProofCompanionApp.swift", "utf8");
 const vision = readFileSync("companion/macos/Sources/CompanionVision/LocalTextRead.swift", "utf8");
 const entitlements = readFileSync("companion/macos/ProofPhotosCompanion.entitlements", "utf8");
+const buildApp = readFileSync("companion/macos/build-app.sh", "utf8");
+const packageRelease = readFileSync("companion/macos/package-release.sh", "utf8");
 it("keeps Photos read-only and grants only a loopback-bound server, never an internet client", () => {
   expect(native).not.toMatch(/performChanges|PHAssetChangeRequest|PHAssetCollectionChangeRequest|URLSession|URLRequest/);
   expect(native).toContain("@Published var allowICloudDownloads = false");
@@ -39,6 +41,43 @@ it("keeps connect, bounded start, pause and lifecycle gates explicit", () => {
   expect(pause).toContain("unregisterChangeObserver");
   expect(entrypoint).toContain("func windowShouldClose");
   expect(entrypoint).toContain("!model.photos.isEmpty && !model.exported");
+});
+it("fails closed across Developer ID signing, notarization receipts and stapling", () => {
+  expect(buildApp).toContain("Developer ID Application: ");
+  expect(buildApp).toContain("--options runtime --timestamp");
+  expect(buildApp).toContain("--deep --strict --verbose=2");
+  expect(buildApp).toContain("PROOF_EXPECTED_TEAM_ID");
+  expect(buildApp).toContain("PROOF_BUILD_TRIPLE");
+  expect(buildApp).toContain("TeamIdentifier=");
+  expect(buildApp).toContain("^Timestamp=");
+  expect(buildApp).toContain("com.apple.security.get-task-allow");
+  expect(packageRelease).toContain('PROOF_RELEASE_ACTION:?Set the explicit release action');
+  expect(packageRelease).toContain('notarize-existing');
+  expect(packageRelease).toContain("arm64-apple-macosx14.0");
+  expect(packageRelease).toContain('PROOF_PREPARE_SIGNING:-}');
+  expect(packageRelease).toContain('PROOF_SUBMIT_NOTARIZATION:-}');
+  expect(packageRelease).toContain("PROOF_APPROVED_DMG_SHA256");
+  expect(packageRelease).toContain("pre-notarization-sha256.txt");
+  expect(packageRelease).toContain("source-commit.txt");
+  expect(packageRelease).toContain("--wait --output-format json");
+  expect(packageRelease).toContain('companion_notary_status\" == \"Accepted');
+  expect(packageRelease).toContain("notarytool log");
+  expect(packageRelease).toContain("osascript -l JavaScript");
+  expect(packageRelease).toContain("notarization-submit.stderr.txt");
+  expect(packageRelease).toContain('hasOwnProperty.call(log, "issues")');
+  expect(packageRelease).toContain('!["warning", "error"].includes');
+  expect(packageRelease).toContain("issues.length > 0");
+  expect(packageRelease).toContain("stapler validate");
+  expect(packageRelease).toContain("spctl --assess --type open");
+  const prepareBranch = packageRelease.indexOf('if [[ "$companion_release_action" == "prepare" ]]');
+  const prepareExit = packageRelease.indexOf("exit 0", prepareBranch);
+  const submit = packageRelease.indexOf("notarytool submit");
+  expect(packageRelease.indexOf("bash build-app.sh")).toBeGreaterThan(prepareBranch);
+  expect(packageRelease.indexOf("bash build-app.sh")).toBeLessThan(prepareExit);
+  expect(prepareExit).toBeLessThan(submit);
+  expect(packageRelease.indexOf("PROOF_APPROVED_DMG_SHA256")).toBeLessThan(packageRelease.indexOf("notarytool submit"));
+  expect(packageRelease.indexOf("osascript -l JavaScript")).toBeLessThan(packageRelease.indexOf("stapler staple"));
+  expect(packageRelease.match(/bash build-app\.sh/g)).toHaveLength(1);
 });
 it("keeps Recent Photos bounded and local cues separate from exported evidence", () => {
   expect(entrypoint).toContain('Text("Recent Photos (no Favorites needed)").tag("recent")');

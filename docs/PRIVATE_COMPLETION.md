@@ -83,6 +83,18 @@ selection and encrypted backup transfer, not a native collector.
 an authorized Developer ID Application identity, hardened runtime, notarization,
 stapling, and actual Gatekeeper assessment. `package-release.sh` prepares a signed
 DMG but refuses to notarize without a separate explicit flag and keychain profile.
+The signed build is verified for a strict nested signature, hardened runtime,
+approved Apple team, secure timestamp, and absence of `get-task-allow=true`.
+An explicit `PROOF_RELEASE_ACTION=prepare` plus fresh signing approval records the
+source commit and pre-notarization DMG hash without uploading. A later
+`notarize-existing` run requires fresh approval of that exact hash and never rebuilds
+or re-signs it. Notarization retains Apple's JSON result, protected diagnostics, and
+validated log; requires matching `Accepted` statuses; and refuses to staple when
+Apple reports warnings or errors. Preserve those receipts with the final stapled
+DMG hash.
+The v0.2.0 native companion release is Apple-silicon-only; Intel Macs and Windows
+retain the private browser intake until a separately built and tested native client
+is available.
 Do not label the local development build a public signed release. Browser pairing
 permission/CSP checks and signed-app testing remain release gates.
 

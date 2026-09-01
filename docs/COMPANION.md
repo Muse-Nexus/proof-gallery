@@ -7,7 +7,9 @@ for review; it never generates categories or treats those words as exact quotes.
 
 ## Run locally
 
-Requires macOS 14+ and Xcode with Swift 6 (the package uses Swift 5 language mode).
+Building locally requires macOS 14+ and Xcode with Swift 6 (the package uses Swift
+5 language mode). The distributed v0.2.0 companion is Apple-silicon-only; Intel
+Macs and Windows can use the private browser intake.
 From the repository root:
 
 ```sh
