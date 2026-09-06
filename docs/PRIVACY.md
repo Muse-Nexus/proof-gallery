@@ -36,7 +36,12 @@ Local media intake adds a separate `proof_candidates` IndexedDB store (database
 version 2). Pending original photos/clips and details are unencrypted, private
 only to the browser profile, and excluded from saved-Proof search. Encrypted full
 backups include pending media and saved draft notes; legacy saved-only exports do not.
-File selection or a selected folder is a one-time import, not a continuing grant.
+Ordinary file/folder selection is a one-time import. The separate folder source
+uses a read-only directory handle and explicit Start for bounded checks while
+the gallery is open and visible. Its handle stays in memory; Pause/Disconnect
+cancel work, and reload ends the connection. No subfolders are read. Incoming
+media still passes the existing pending-only validator. Full scope, limits,
+permission semantics, and cancellation are in [automatic sources](AUTOMATIC_SOURCES.md).
 No account connector, OCR, face recognition, or AI image analysis runs.
 
 Approval validates container signatures and SHA-256 against stored bytes, checks
@@ -193,8 +198,9 @@ the private Supabase lexical path instead.
 
 All source access is user-initiated. The web gallery does not search or mine Drive,
 Dropbox, email, photos, messages, finance, ordinary memories, or other accounts.
-It does not run background collection or automatically surface evidence during
-distress. The selected-media review inbox does not grant connector or library
+The explicitly started folder source checks selected files while the visible
+gallery is open. It does not collect after the browser closes or automatically
+surface evidence during distress. The review inbox does not grant connector or library
 access. The optional native companion has its own bounded Photos source and
 active-session observer, not general account mining. Any further collector must
 preserve that review boundary and add explicit source permissions, revocation,

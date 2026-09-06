@@ -8,7 +8,7 @@ for review; it never generates categories or treats those words as exact quotes.
 ## Run locally
 
 Building locally requires macOS 14+ and Xcode with Swift 6 (the package uses Swift
-5 language mode). The distributed v0.2.0 companion is Apple-silicon-only; Intel
+5 language mode). The v0.2.0 release target is Apple-silicon-only; Intel
 Macs and Windows can use the private browser intake.
 From the repository root:
 
@@ -148,6 +148,13 @@ the file fallback remains available. The same session offers optional on-device
 text matching and source-ID selection for full-note readings. No cloud AI,
 face identification, remote Photos commands, or automatic approval is introduced.
 See [exact boundaries and release gates](PRIVATE_COMPLETION.md).
+
+Pairing currently accepts only the official gallery origin,
+`https://proof-gallery-9jn.pages.dev`. A localhost checkout or self-hosted
+custom domain must use **Export for review** and **Import companion review**.
+Do not widen the origin allowlist or disable browser security for a quick test.
+No public notarized installer is available yet; a signed local artifact alone
+does not establish public distribution.
 
 Run the web `bun run check`, focused companion import tests, and native
 `swift test`/`bash build-app.sh`. Tests use synthetic media, not real libraries.

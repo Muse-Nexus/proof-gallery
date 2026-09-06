@@ -16,6 +16,9 @@ hidden.
 - Preserve exact quotes, dates, and provenance.
 - Show `MISSING` or omit an optional field when evidence is unavailable.
 - Retrieval must be initiated by the user inside Proof Gallery.
+- Permissioned source checks may update an aggregate review count, but incoming
+  media stays pending until approved. Do not create urgency, streaks, worth scores,
+  or personal-evidence notifications as part of automatic intake.
 - Do not automatically surface Proof during distress.
 - Avoid sentimental, diagnostic, coercive, and falsely optimistic language.
 - Return the saved evidence itself; do not manufacture an emotional conclusion.

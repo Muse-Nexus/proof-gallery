@@ -95,8 +95,10 @@ DMG hash.
 The v0.2.0 native companion release is Apple-silicon-only; Intel Macs and Windows
 retain the private browser intake until a separately built and tested native client
 is available.
-Do not label the local development build a public signed release. Browser pairing
-permission/CSP checks and signed-app testing remain release gates.
+Do not label the local development build a public native release. Browser pairing
+permission/CSP checks and signed-app testing remain native distribution gates;
+they do not require holding unrelated browser-only features. Public web releases
+must label the companion as prerelease and retain the file-picker fallback.
 
 ## Recovery verification
 

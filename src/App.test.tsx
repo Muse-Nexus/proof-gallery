@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  countLocalProofCandidates,
   deleteLocalProofItem,
   importLocalProofBackup,
   listLocalProofItems,
@@ -23,6 +24,7 @@ vi.mock("./lib/local-proof-store", () => ({
   LOCAL_PROOF_OWNER_ID: "local-browser-profile",
   clearLocalProofItems: vi.fn().mockResolvedValue(undefined),
   createLocalProofItem: vi.fn(),
+  countLocalProofCandidates: vi.fn().mockResolvedValue(0),
   deleteLocalProofItem: vi.fn(),
   exportLocalProofBackup: vi.fn(),
   importLocalProofBackup: vi.fn(),
@@ -37,6 +39,13 @@ vi.mock("./lib/local-proof-store", () => ({
   updateLocalProofItem: vi.fn(),
 }));
 vi.mock("./lib/encrypted-backup", () => ({ isEncryptedProofBackup: vi.fn().mockResolvedValue(false) }));
+vi.mock("./components/FolderSource", () => ({
+  FolderSource: ({ suspended, onCandidatesAdded }: { suspended: boolean; onCandidatesAdded: () => void }) => (
+    <section aria-label="Chosen folder source" data-suspended={String(suspended)}>
+      <button type="button" onClick={onCandidatesAdded}>Synthetic new candidate notification</button>
+    </section>
+  ),
+}));
 
 function localItem(): ProofItem {
   return {
@@ -62,6 +71,7 @@ function localItem(): ProofItem {
 }
 
 beforeEach(() => {
+  vi.mocked(countLocalProofCandidates).mockResolvedValue(0);
   vi.mocked(listLocalProofItems).mockResolvedValue([]);
   vi.mocked(searchLocalProofItems).mockResolvedValue({
     items: [],
@@ -152,7 +162,8 @@ describe("standalone local storage boundary", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Start in this browser" }),
     );
-    await screen.findByRole("button", { name: "Restore" });
+    await screen.findByRole("button", { name: "Add Proof" });
+    fireEvent.click(screen.getByText("More"));
 
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     fireEvent.change(screen.getByLabelText("Backup file"), {
@@ -218,6 +229,7 @@ describe("standalone local storage boundary", () => {
     await screen.findByRole("heading", { name: "Your local gallery is empty" });
     expect(screen.getByText("Proof deleted.")).toBeInTheDocument();
 
+    fireEvent.click(screen.getByText("More"));
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     fireEvent.change(screen.getByLabelText("Backup file"), {
       target: {
@@ -239,6 +251,7 @@ describe("standalone local storage boundary", () => {
     render(<App />);
 
     await screen.findByRole("button", { name: "Add Proof" });
+    fireEvent.click(screen.getByText("More"));
     fireEvent.click(screen.getByRole("button", { name: "About" }));
 
     expect(
@@ -398,5 +411,67 @@ describe("standalone local storage boundary", () => {
     expect(screen.getByRole("button", { name: "Close editor" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("fills a search idea without retrieving evidence until the user submits", async () => {
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Times people valued my work/ }));
+    const search = screen.getByRole("searchbox", { name: "Search your Proof" });
+    expect(search).toHaveValue("Times people valued my work");
+    expect(search).toHaveFocus();
+    expect(searchLocalProofItems).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await waitFor(() => expect(searchLocalProofItems).toHaveBeenCalledOnce());
+  });
+
+  it("keeps a chosen folder mounted across views and suspends it while editing", async () => {
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    const { container } = render(<App />);
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+    const folder = container.querySelector('[aria-label="Chosen folder source"]');
+    expect(folder).not.toBeVisible();
+    expect(folder).toHaveAttribute("data-suspended", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    expect(screen.getByRole("region", { name: "Chosen folder source" })).toBe(folder);
+    fireEvent.click(screen.getByRole("button", { name: "Saved Proof" }));
+    expect(container.querySelector('[aria-label="Chosen folder source"]')).toBe(folder);
+    expect(folder).toHaveAttribute("data-suspended", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Proof" }));
+    expect(folder).toHaveAttribute("data-suspended", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+    expect(folder).toHaveAttribute("data-suspended", "false");
+  });
+
+  it("updates only the review count when background media arrives during saved search", async () => {
+    const item = localItem();
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    vi.mocked(searchLocalProofItems).mockResolvedValue({ items: [item], semanticDegraded: true });
+    vi.mocked(countLocalProofCandidates).mockResolvedValue(2);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("button", { name: "Review media, 2 pending" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search your Proof" }), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await screen.findByText("1 search result");
+    const listCalls = vi.mocked(listLocalProofItems).mock.calls.length;
+    const releaseCalls = vi.mocked(releaseLocalProofImageUrls).mock.calls.length;
+
+    vi.mocked(countLocalProofCandidates).mockResolvedValue(3);
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0]?.[0];
+    if (!notify) throw new Error("Local change subscription was not registered");
+    act(() => notify("pending"));
+
+    await screen.findByRole("button", { name: "Review media, 3 pending" });
+    expect(screen.getByText("1 search result")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search your Proof" })).toHaveValue("synthetic");
+    expect(listLocalProofItems).toHaveBeenCalledTimes(listCalls);
+    expect(releaseLocalProofImageUrls).toHaveBeenCalledTimes(releaseCalls);
+    expect(searchLocalProofItems).toHaveBeenCalledOnce();
   });
 });

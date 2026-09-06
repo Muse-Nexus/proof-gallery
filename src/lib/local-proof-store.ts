@@ -119,7 +119,7 @@ const objectUrlCache = new Map<
   { revision: string; url: string }
 >();
 let databasePromise: Promise<IDBDatabase> | null = null;
-type LocalProofChangeKind = "change" | "clear";
+type LocalProofChangeKind = "change" | "clear" | "pending";
 const changeListeners = new Set<(kind: LocalProofChangeKind) => void>();
 let incomingChangeChannel: BroadcastChannel | null = null;
 
@@ -164,7 +164,7 @@ export function subscribeToLocalProofChanges(
     incomingChangeChannel = createChangeChannel();
     if (incomingChangeChannel) {
       incomingChangeChannel.onmessage = (event: MessageEvent<unknown>) => {
-        if (event.data === "change" || event.data === "clear") {
+        if (event.data === "change" || event.data === "clear" || event.data === "pending") {
           deliverLocalProofChange(event.data);
         }
       };
@@ -1758,6 +1758,14 @@ export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]>
   return rows.map(validateCandidate).sort((a, b) => b.importedAt.localeCompare(a.importedAt)).map(mapCandidate);
 }
 
+/** Status badges do not need to load media bytes or allocate preview URLs. */
+export async function countLocalProofCandidates(): Promise<number> {
+  const db = await openDatabase();
+  const tx = db.transaction(CANDIDATE_STORE, "readonly");
+  const [count] = await Promise.all([requestResult(tx.objectStore(CANDIDATE_STORE).count()), transactionComplete(tx)]);
+  return count;
+}
+
 /** Companion exports are proposals only and cannot enter saved Proof here. */
 export async function stageLocalProofCompanion(blob: Blob, signal?: AbortSignal): Promise<{ added: number; duplicates: number }> {
   signal?.throwIfAborted();
@@ -1786,40 +1794,47 @@ export async function clearLocalProofCandidates(): Promise<void> {
   const clearRequest = requestResult(tx.objectStore(CANDIDATE_STORE).clear());
   const [ids] = await Promise.all([idsRequest, clearRequest, transactionComplete(tx)]);
   for (const id of ids) revokeImageUrl(String(id));
-  publishLocalProofChange("change");
+  publishLocalProofChange("pending");
 }
 
 /** Selection authorizes local staging only. Nothing here enters Proof or search. */
-export async function stageLocalProofMedia(files: readonly File[]): Promise<{
+export async function stageLocalProofMedia(files: readonly File[], signal?: AbortSignal): Promise<{
   added: number; duplicates: number; rejected: { name: string; reason: string }[];
 }> {
+  signal?.throwIfAborted();
   if (files.length > 50 || files.reduce((sum, file) => sum + file.size, 0) > MAX_BACKUP_IMAGE_BYTES) {
     throw new Error("Choose up to 50 files and 48 MiB per batch. Nothing from this batch was imported.");
   }
   const prepared: CandidateRecord[] = [];
   const rejected: { name: string; reason: string }[] = [];
   for (const file of files) {
+    signal?.throwIfAborted();
     try {
       await validateLocalProofMedia(file);
+      signal?.throwIfAborted();
       const name = requiredString(file.name, "Original filename", 1024);
       const blob = file.slice(0, file.size, file.type);
+      const digest = await sha256(blob);
+      signal?.throwIfAborted();
       prepared.push({
         id: crypto.randomUUID(), revision: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
         visibility: PROOF_VISIBILITY, importedAt: new Date().toISOString(), fileName: name,
-        blob, digest: await sha256(blob), input: {
+        blob, digest, input: {
           title: name.slice(0, 200), evidenceText: "", occurredOn: null, category: null,
           sourceType: file.type.startsWith("image/") ? "photo" : "other",
           source: `Selected file: ${name.slice(0, 480)}`, tags: [], person: null, project: null,
         },
       });
     } catch (error) {
+      signal?.throwIfAborted();
       rejected.push({ name: file.name, reason: error instanceof Error ? error.message : "Unsupported file" });
     }
   }
-  return { ...await stagePreparedMedia(prepared), rejected };
+  return { ...await stagePreparedMedia(prepared, signal), rejected };
 }
 
 async function stagePreparedMedia(prepared: CandidateRecord[], signal?: AbortSignal): Promise<{ added: number; duplicates: number }> {
+  signal?.throwIfAborted();
   // Reject any batch that cannot be read back before opening a write transaction.
   const checked = prepared.map(validateCandidate);
   const db = await openDatabase();
@@ -1838,6 +1853,7 @@ async function stagePreparedMedia(prepared: CandidateRecord[], signal?: AbortSig
     const insert = () => {
       if (!saved || !pending) return;
       try {
+        signal?.throwIfAborted();
         const seen = new Set([...saved.map(row => row.imageDigest), ...pending.map(row => row.digest)]);
         let pendingBytes = pending.reduce((sum, row) => sum + row.blob.size, 0);
         for (const candidate of checked) {
@@ -1857,7 +1873,7 @@ async function stagePreparedMedia(prepared: CandidateRecord[], signal?: AbortSig
     tx.oncomplete = () => { signal?.removeEventListener("abort", cancel); resolve({ added, duplicates }); };
     tx.onerror = tx.onabort = () => { signal?.removeEventListener("abort", cancel); reject(failure ?? tx.error ?? new Error("Photo import failed")); };
   });
-  publishLocalProofChange("change");
+  if (result.added > 0) publishLocalProofChange("pending");
   return result;
 }
 
@@ -1928,7 +1944,7 @@ export async function resolveLocalProofCandidates(
     tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Review could not be saved"));
   });
   for (const { candidate } of entries) revokeImageUrl(candidate.id);
-  publishLocalProofChange("change");
+  publishLocalProofChange(action === "approve" ? "change" : "pending");
 }
 
 export async function requestLocalProofPersistence(): Promise<boolean> {

@@ -23,14 +23,20 @@ URLs, provider responses, production identifiers, or database dumps.
 
 Read AGENTS.md for the purpose and evidence-handling contract. Permissioned
 discovery is the product direction. Implemented source paths are local
-selected-media review and the optional Mac companion's bounded, active-session
+selected-media review, the explicitly started browser folder source, and the
+optional Mac companion's bounded, active-session
 Photos source. The companion exports candidates for explicit review, not
 saved-Proof backups or automatic sync. General account/library mining, public
 sharing, distress-triggered surfacing, diagnosis, worth scoring, invented
 meaning, and mandatory model orchestration are outside the implemented scope.
 
-Do not attach a real exported backup to an issue or pull request. Local backups
-are plaintext and may contain original image bytes and EXIF metadata.
+Do not attach a real backup to an issue or pull request. Default full backups are
+encrypted; older JSON backups and companion review files are plaintext. All can
+contain original image bytes and EXIF metadata. Use synthetic fixtures only.
+
+Folder-source changes must verify denied permissions, no reads before Start,
+bounded top-level access, cancellation through pending writes, suspension,
+capacity retry, and unchanged-file suppression. See docs/AUTOMATIC_SOURCES.md.
 
 ## Synthetic fixture style
 

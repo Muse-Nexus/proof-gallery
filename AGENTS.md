@@ -8,13 +8,23 @@ of whether someone is good. Receipts and finished work are examples, not the mis
 The direction is low-effort, permissioned discovery. Do not turn the temporary
 manual MVP boundary into the permanent product purpose. Equally, do not claim a
 connector, background collector, native companion, or AI interpretation exists
-until it actually works. The web intake is selected local media and explicit
-companion review files. The Mac companion reads Recent Photos, Favorites, or a
+until it actually works. Web intake includes selected local media, an explicitly
+started folder source while the page is open and visible, and companion review
+files. The Mac companion reads Recent Photos, Favorites, or a
 chosen album/date range while open, with a separate owner-triggered Photos permission flow.
 It exports private candidate files or explicitly transfers one prepared batch
 over a five-minute same-Mac pairing. Neither route approves Proof or syncs accounts.
 
 - Keep source selection, pending review, approved Proof, and retrieval distinct.
+- Automatic folder intake must use a user-picked read-only handle, explicit Start,
+  bounded top-level enumeration, and pending-only writes through existing media
+  validation. No persisted handle, recursive scan, write permission, login item,
+  or closed-browser collection. Pause/Disconnect/unmount/permission loss must
+  cancel reads and transaction writes; temporary hidden-page/editor suspension
+  may resume only an already-running source. Do not rediscover handled unchanged
+  files after review removal within the connection. No dates/meaning from filenames.
+- Automatic intake is not automatic retrieval. Show aggregate source/review
+  status without unrequested personal evidence, guilt, urgency, or streaks.
 - Never feed companion output into Restore: that writes saved Proof. Use the
   dedicated companion importer, which only stages pending review.
 - Native HEIC JPEG previews must retain their derivative label and original

@@ -9,12 +9,16 @@ silently fall back, sync, co-search, or migrate evidence between them.
 ## Browser-local development
 
 1. Install Bun.
-2. Run `bun install` and `bun run dev`.
-3. Open `http://localhost:5173` and choose **Use this browser**.
+2. Run `bun install --frozen-lockfile` and `bun run dev`.
+3. Open `http://localhost:5173` and choose **Start in this browser**.
 
 Items and image bytes are stored in IndexedDB for that exact browser origin and
 profile. Search is deterministic Proof-only lexical ranking and calls no model,
-Supabase project, Drive, Dropbox, or other provider.
+Supabase project, Drive, Dropbox, or other provider. Optional on-device meaning
+matching stays local too. See [automatic sources](AUTOMATIC_SOURCES.md) for
+explicitly started folder checks. The Mac companion's same-device pairing is
+restricted to the official site origin; self-hosted instances use its review-file
+export/import fallback instead (see [companion setup](COMPANION.md)).
 
 Local mode is not encrypted by Proof Gallery and has no authenticated owner
 identity. Anyone with access to the browser profile, a privileged extension,

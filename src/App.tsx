@@ -14,6 +14,7 @@ import { MediaInbox } from "./components/MediaInbox";
 import { ProofStory } from "./components/ProofStory";
 import { BackupPanel } from "./components/BackupPanel";
 import { CompanionPanel } from "./components/CompanionPanel";
+import { FolderSource } from "./components/FolderSource";
 import { semanticCompanionSearch, type CompanionSession } from "./lib/local-companion";
 import {
   createProofItem,
@@ -26,6 +27,7 @@ import {
   LOCAL_PROOF_OWNER_ID,
   clearLocalProofItems,
   createLocalProofItem,
+  countLocalProofCandidates,
   deleteLocalProofItem,
   listLocalProofItems,
   releaseLocalProofImageUrls,
@@ -121,7 +123,7 @@ function LocalStart({
             Gallery. Clearing site data can erase it; export a private backup.
           </p>
           <p className="landing-fine-print">
-            No account. No app analytics or session replay. Nothing collected automatically.
+            No account needed. Choose what comes in. Keep what feels relevant.
           </p>
           {onUseHosted && (
             <button className="text-button landing-hosted-button" type="button" onClick={onUseHosted}>
@@ -147,23 +149,23 @@ function LocalStart({
           src="/visuals/paper-collage-unsplash.webp"
         />
         <div className="visual-boundary-copy">
-          <span className="landing-eyebrow">Image forward, truth intact</span>
+          <span className="landing-eyebrow">A photo. A few words. Enough.</span>
           <h2 id="visual-boundary-heading">
-            Warm visuals can set the tone. They cannot fill in your history.
+            You bring the moment. Start with a short note.
           </h2>
           <p>
-            Stock and AI art appear only as clearly labeled decoration. Inside
-            your gallery, every image is an evidence attachment you chose.
-            Text-only Proof stays text-only.
+            Add a photo, a message, or a few words about what happened. Keep the
+            details you know. Later, find it again or read your saved moments
+            together as a story, in your own words.
           </p>
           <div className="visual-truth-receipt" aria-label="Visual truth boundary">
             <div>
-              <span>Evidence attachment</span>
-              <strong>Your image · stored with the item</strong>
+              <span>Your gallery</span>
+              <strong>Your photos, exact words, dates, and sources</strong>
             </div>
             <div>
-              <span>Decorative visual</span>
-              <strong>Public-page atmosphere · never item data</strong>
+              <span>This page</span>
+              <strong>Labeled decorative art · never your evidence</strong>
             </div>
           </div>
         </div>
@@ -172,23 +174,23 @@ function LocalStart({
       <section className="landing-section" id="how-it-works" aria-labelledby="how-heading">
         <div className="section-heading">
           <span>How it works</span>
-          <h2 id="how-heading">Concrete, source-faithful, and yours.</h2>
+          <h2 id="how-heading">Less collecting. More finding it again.</h2>
         </div>
         <ol className="landing-steps">
           <li>
             <span className="step-number">01</span>
-            <h3>Bring photos in a batch</h3>
-            <p>Choose photos, screenshots, or short clips on Mac, Android, or PC. They arrive in review, not straight into your gallery.</p>
+            <h3>Choose a source</h3>
+            <p>Pick photos on your phone or computer. In supported browsers, start checking a chosen folder while the gallery is open. The Mac companion can read a selected Photos source.</p>
           </li>
           <li>
             <span className="step-number">02</span>
             <h3>Keep what belongs</h3>
-            <p>Review together, choose a category, and save selected. The original file stays attached. Notes and unknown dates can stay blank.</p>
+            <p>New media waits in your private review. Add a short note if you want, choose what belongs, and save it. A date you do not know can stay blank.</p>
           </li>
           <li>
             <span className="step-number">03</span>
             <h3>Ask only when you want it</h3>
-            <p>Look for care, belonging, or accomplishment. Results come only from your saved evidence—not invented reassurance.</p>
+            <p>Find a kind message, a moment together, or something you made happen. Search returns your saved words and photos with their dates and sources.</p>
           </li>
         </ol>
       </section>
@@ -196,7 +198,7 @@ function LocalStart({
       <section className="landing-privacy" aria-labelledby="privacy-heading">
         <div>
           <span className="privacy-badge">Browser-local by default</span>
-          <h2 id="privacy-heading">A small tool with honest boundaries.</h2>
+          <h2 id="privacy-heading">Personal by design.</h2>
         </div>
         <div className="privacy-points">
           <p><strong>Local means local.</strong> Browser saving and text search stay here. Optional meaning matching uses a paired companion on this Mac, not a cloud service.</p>
@@ -282,6 +284,10 @@ function Gallery({
   const [companion, setCompanion] = useState<CompanionSession | null>(null);
   const [showCompanion, setShowCompanion] = useState(false);
   const [useSemantic, setUseSemantic] = useState(false);
+  const [view, setView] = useState<"gallery" | "sources">("gallery");
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const toolsDisclosure = useRef<HTMLDetailsElement>(null);
   const currentItems = useRef(items); currentItems.current = items;
   const searchRequest = useRef<AbortController | null>(null);
   useEffect(() => () => searchRequest.current?.abort(), []);
@@ -291,6 +297,11 @@ function Gallery({
     const timer = window.setTimeout(() => { setCompanion(null); setUseSemantic(false); }, Math.max(0, companion.expiresAt - Date.now()));
     return () => window.clearTimeout(timer);
   }, [companion]);
+
+  async function refreshPendingCount() {
+    try { setPendingCount(await countLocalProofCandidates()); }
+    catch { setPendingCount(null); }
+  }
 
   async function reload() {
     setLoading(true);
@@ -304,6 +315,7 @@ function Gallery({
     } finally {
       setLoading(false);
     }
+    if (isLocal) await refreshPendingCount();
   }
 
   useEffect(() => {
@@ -311,6 +323,10 @@ function Gallery({
     if (!isLocal) return;
 
     const unsubscribe = subscribeToLocalProofChanges((kind) => {
+      if (kind === "pending") {
+        void refreshPendingCount();
+        return;
+      }
       searchRequest.current?.abort();
       releaseLocalProofImageUrls();
       setSearchResults(null);
@@ -354,6 +370,36 @@ function Gallery({
   const hasFilters = Boolean(filters.category || filters.tag);
   const hasSearch = searchResults !== null;
   const isNarrowed = hasFilters || hasSearch;
+  const editingBlocked = busy || mediaDirty;
+
+  function changeView(next: "gallery" | "sources") {
+    if (editingBlocked) return;
+    searchRequest.current?.abort();
+    setStorySeedId(null);
+    setView(next);
+    setShowMediaInbox(false);
+  }
+
+  function openReview() {
+    if (editingBlocked) return;
+    setStorySeedId(null);
+    setView("gallery");
+    setBackupMode(null);
+    setShowMediaInbox(true);
+  }
+
+  function openBackup(mode: "export" | "restore") {
+    if (editingBlocked) return;
+    setStorySeedId(null);
+    setShowMediaInbox(false);
+    setBackupMode(mode);
+  }
+
+  function openEditor(next: ProofItem | "new") {
+    if (editingBlocked) return;
+    setStorySeedId(null);
+    setEditor(next);
+  }
 
   function clearSearch() {
     setSearchResults(null);
@@ -496,42 +542,51 @@ function Gallery({
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
-          <span className="privacy-badge">
-            {isLocal
-              ? "Local · not synced · not encrypted"
-              : "Private · only you"}
-          </span>
+        <div className="app-identity">
+          <span className="gallery-eyebrow"><span className="brand-mark" aria-hidden="true">P</span>A place for your real life</span>
           <h1>Proof Gallery</h1>
-          <p className="gallery-purpose">Loved. Valued. Connected. Accomplished. The real evidence, here when you need it.</p>
-          <p>{PROOF_CONSTITUTION}</p>
+          <p className="gallery-purpose">The care, connection, and things you made happen. Here when you want to remember.</p>
         </div>
         <div className="header-actions">
           <button
             className="primary-button"
             type="button"
-            onClick={() => setEditor("new")}
-            disabled={busy}
+            onClick={() => openEditor("new")}
+            disabled={editingBlocked}
           >
             Add Proof
           </button>
+          {isLocal && <button className="secondary-button review-button" type="button" aria-label={`Review media${pendingCount === null ? "" : `, ${pendingCount} pending`}`} disabled={editingBlocked} onClick={openReview}>
+            Review media{pendingCount !== null && <span className="review-count" aria-hidden="true">{pendingCount}</span>}
+          </button>}
+          <details className="gallery-tools" ref={toolsDisclosure} onKeyDown={event => {
+            if (event.key === "Escape" && toolsDisclosure.current) {
+              toolsDisclosure.current.open = false;
+              toolsDisclosure.current.querySelector("summary")?.focus();
+            }
+          }} onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+          }}>
+            <summary>More <span aria-hidden="true">⌄</span></summary>
+            <div className="gallery-tools-menu" onClick={event => {
+              const button = (event.target as HTMLElement).closest("button");
+              if (button && !button.disabled && toolsDisclosure.current) toolsDisclosure.current.open = false;
+            }}>
           {isLocal ? (
             <>
-              <button className="secondary-button" disabled={busy} onClick={() => setShowMediaInbox(true)}>Photos & media</button>
-              <button className="secondary-button" disabled={busy} onClick={() => setShowCompanion(value => !value)}>Connect this Mac</button>
               <button
-                className="secondary-button"
+                className="text-button"
                 type="button"
-                onClick={() => { setShowMediaInbox(false); setBackupMode("export"); }}
-                disabled={busy || mediaDirty}
+                onClick={() => openBackup("export")}
+                disabled={editingBlocked}
               >
                 Back up
               </button>
               <button
-                className="secondary-button"
+                className="text-button"
                 type="button"
-                onClick={() => { setShowMediaInbox(false); setBackupMode("restore"); }}
-                disabled={busy || mediaDirty}
+                onClick={() => openBackup("restore")}
+                disabled={editingBlocked}
               >
                 Restore
               </button>
@@ -539,7 +594,7 @@ function Gallery({
                 className="danger-button"
                 type="button"
                 onClick={() => void clearLocalData()}
-                disabled={busy}
+                disabled={editingBlocked}
               >
                 Remove all saved local Proof
               </button>
@@ -573,36 +628,73 @@ function Gallery({
           <button className="text-button" type="button" onClick={onVisitLanding} disabled={busy || mediaDirty}>
             About
           </button>
+            </div>
+          </details>
         </div>
       </header>
 
+      <div className="gallery-navigation">
+        <nav aria-label="Gallery views" className="gallery-view-buttons">
+          <button type="button" aria-current={view === "gallery" ? "page" : undefined} disabled={editingBlocked} onClick={() => changeView("gallery")}>Saved Proof</button>
+          {isLocal && <button type="button" aria-current={view === "sources" ? "page" : undefined} disabled={editingBlocked} onClick={() => changeView("sources")}>Sources</button>}
+        </nav>
+        <span className="privacy-badge">{isLocal ? "Local · not synced · not encrypted" : "Private · only you"}</span>
+      </div>
+
       {isLocal && (
-        <section className="local-boundary" aria-label="Local storage boundary">
-          <strong>Local to this browser profile.</strong>
-          <span>
-            Not synced or encrypted by Proof Gallery. Clearing site data, using
-            private browsing, or losing this profile can erase it. Download an
-            encrypted backup to protect saved Proof, pending media, and saved notes.
-          </span>
-        </section>
+        <details className="local-boundary">
+          <summary>Stored in this browser. Keep a backup.</summary>
+          <p>Local to this browser profile, not account-isolated, synced, or encrypted by Proof Gallery. Clearing site data, using private browsing, or losing this profile can erase it. Encrypted backups include saved Proof, pending media, and saved notes.</p>
+          <button className="text-button" type="button" disabled={editingBlocked} onClick={() => openBackup("export")}>Create an encrypted backup</button>
+        </details>
       )}
 
       {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { setNotice(null); clearSearch(); await reload(); }} />}
-      {isLocal && showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); }} />}
-      {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => setShowMediaInbox(false)} onSaved={async () => { clearSearch(); await reload(); }} />}
+      {isLocal && <section className="sources-panel" aria-labelledby="sources-title" hidden={view !== "sources"}>
+        <div className="sources-heading">
+          <span className="gallery-eyebrow">Make room for the everyday</span>
+          <h2 id="sources-title">Your sources, at your pace.</h2>
+          <p>Choose where media comes from. New finds wait in private review until you decide what belongs in your gallery.</p>
+        </div>
+        <div className="source-cards">
+          <FolderSource suspended={busy || mediaDirty || Boolean(editor || backupMode || storySeedId) || showMediaInbox} onReview={openReview} onCandidatesAdded={() => void refreshPendingCount()} />
+          <section className="source-card" aria-labelledby="media-source-title">
+            <span className="source-kind">Mac · Android · PC</span>
+            <h3 id="media-source-title">Photos & media</h3>
+            <p>Choose a few images, screenshots, or clips from your device. Add a short note during review.</p>
+            <button className="secondary-button" type="button" disabled={editingBlocked} onClick={openReview}>Choose media</button>
+            <small>Only the files you choose. Originals stay where they are.</small>
+          </section>
+          <section className="source-card" aria-labelledby="mac-source-title">
+            <span className="source-kind">Optional Mac companion</span>
+            <h3 id="mac-source-title">Apple Photos</h3>
+            <p>Use the companion to select a Photos album or date range. Transfer a prepared batch into your review.</p>
+            <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => setShowCompanion(value => !value)}>{showCompanion ? "Close Mac connection" : "Connect this Mac"}</button>
+            <small>{companion ? "A temporary companion connection is active." : "Requires the separately installed Mac companion."}</small>
+          </section>
+        </div>
+        {showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setView("gallery"); setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); void reload(); }} />}
+        <p className="sources-footnote">Review is a place to choose, not an assessment of your life. Photos do not tell us who someone is or what a moment means to you.</p>
+      </section>}
+      {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => { setShowMediaInbox(false); void refreshPendingCount(); }} onSaved={async () => { clearSearch(); await reload(); }} />}
 
       {storySeed && <ProofStory key={storySeed.id} seed={storySeed} savedProof={items} companion={companion} onClose={() => setStorySeedId(null)} />}
 
+      {error && <p className="error-banner" role="alert">{error}</p>}
+      {notice && <p className="notice-banner" role="status">{notice}</p>}
+
+      <div hidden={view !== "gallery" || showMediaInbox}>
       <section className="search-panel" aria-labelledby="search-title">
         <div>
           <h2 id="search-title">What do you need proof of right now?</h2>
           <p>
-            Search is user-initiated and restricted to this {isLocal ? "local Proof" : "private"} collection.
+            Find your saved words, photos, and moments. Only the Proof you have chosen to keep.
           </p>
         </div>
         {isLocal && companion?.semantic && <label className="checkbox-row"><input type="checkbox" checked={useSemantic} disabled={busy} onChange={event => setUseSemantic(event.target.checked)} />Match by meaning on this Mac. Sends only filtered saved Proof text to the paired companion when you search.</label>}
         <form className="search-form" onSubmit={runSearch}>
           <input
+            ref={searchInput}
             type="search"
             aria-label="Search your Proof"
             value={query}
@@ -629,6 +721,10 @@ function Gallery({
             </button>
           )}
         </form>
+        {!query && <div className="search-starters" aria-label="Search ideas">
+          <span>Try a starting point</span>
+          {["Times people valued my work", "Moments of connection", "Things I finished"].map(prompt => <button className="search-starter" key={prompt} type="button" disabled={busy} onClick={() => { setQuery(prompt); searchInput.current?.focus(); }}>{prompt}<span aria-hidden="true"> ↗</span></button>)}
+        </div>}
         {searchResults && isLocal && (
           <p className="search-receipt">
             {semanticDegraded ? "Showing deterministic local lexical matches. No model or provider was called." : "Showing on-device meaning matches from filtered saved Proof only. Similarity is not a judgment of worth or meaning."}
@@ -689,9 +785,6 @@ function Gallery({
         </div>
       )}
 
-      {error && <p className="error-banner" role="alert">{error}</p>}
-      {notice && <p className="notice-banner" role="status">{notice}</p>}
-
       {loading ? (
         <p className="loading-state" role="status">Loading Proof…</p>
       ) : visible.length === 0 ? (
@@ -729,20 +822,43 @@ function Gallery({
             }}>
               Show all Proof
             </button>
+          ) : isLocal ? (
+            <div className="first-use-paths">
+              <article>
+                <span className="step-number">01 · Begin anywhere</span>
+                <h3>One real thing</h3>
+                <p>A kind message, a photo, or a short note. Keep the original words.</p>
+                <button className="primary-button" type="button" disabled={editingBlocked} onClick={() => openEditor("new")}>Add the first Proof</button>
+              </article>
+              <article>
+                <span className="step-number">02 · Make it easier</span>
+                <h3>Choose a source</h3>
+                <p>Bring media from your device or start a chosen folder checking for new files.</p>
+                <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => changeView("sources")}>Explore sources</button>
+              </article>
+              <article>
+                <span className="step-number">03 · Keep a copy</span>
+                <h3>Make a private backup</h3>
+                <p>Once you have saved something, protect it with an encrypted recovery file.</p>
+                <button className="text-button" type="button" disabled={editingBlocked} onClick={() => openBackup("export")}>Open backup tools</button>
+              </article>
+            </div>
           ) : (
-            <button className="primary-button" type="button" disabled={busy} onClick={() => setEditor("new")}>Add the first Proof</button>
+            <button className="primary-button" type="button" disabled={busy} onClick={() => openEditor("new")}>Add the first Proof</button>
           )}
         </section>
       ) : (
         <section className="gallery-grid" aria-label="Saved Proof">
           {visible.map((item) => (
-            <ProofCard key={item.id} item={item} disabled={busy} onEdit={setEditor} onReadStory={candidate => setStorySeedId(candidate.id)} onDelete={(candidate) => void remove(candidate)} />
+            <ProofCard key={item.id} item={item} disabled={busy} onEdit={openEditor} onReadStory={candidate => setStorySeedId(candidate.id)} onDelete={(candidate) => void remove(candidate)} />
           ))}
         </section>
       )}
+      </div>
 
       <footer className="safety-footer">
-        Never use Proof to invalidate pain, create guilt, demand optimism, diagnose, rank worth, or invent emotional meaning.
+        <p>{PROOF_CONSTITUTION}</p>
+        <span>Private review. Original evidence. Your own words.</span>
       </footer>
 
       {editor && (
