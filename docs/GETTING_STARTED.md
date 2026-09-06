@@ -23,12 +23,20 @@ Save the note, choose a category, and save selected items into your gallery.
 ## Make the next addition easier
 
 Choose a dedicated screenshot or photo-export folder in the **folder source**
-and start checking. New media can arrive in review while the gallery stays open
-and visible. You decide when to review it. Pause and disconnect are available.
+and start checking. New media arrives in review by default while the gallery is
+open and visible. Or select **Allow automatic saving from this folder**, choose
+the category and optional tags for its media, and confirm. This permits existing
+and future supported files directly in that folder to become saved Proof without
+per-item review. Only use it for a folder whose contents you want in the gallery.
+The app preserves the media; it does not decide what a photo means.
 
 Folder access depends on your browser; the normal media picker remains
 available. Keep the folder small: only its immediate files are checked.
-Closing or reloading ends the connection. See [automatic sources](AUTOMATIC_SOURCES.md).
+Your trusted folder and approval are remembered in this browser. It can resume
+on return when permission is still granted. **Pause** stays paused across reloads;
+**Forget** removes its approval and connection, not saved items. Ordinary review
+connections still end on reload. Nothing collects while closed.
+See [automatic sources](AUTOMATIC_SOURCES.md).
 
 For Apple Photos directly, the optional [Mac companion](COMPANION.md) offers
 Recent Photos or an album/date range. Favorites are not required. Public

@@ -7,9 +7,15 @@ boundary. Web file intake does not inherit native Photos permissions. The Mac
 companion is a separately permissioned, read-only, bounded source adapter; its
 review-file handoff is not cross-device sync and must never bypass approval.
 The browser folder source needs a selected read-only handle and explicit Start.
-It checks bounded top-level files while the gallery is open and visible, stages
-pending review only, and stops on Pause, Disconnect, permission loss, or unmount.
-Keep the handle in memory. Never add recursive/background account scans or
+It checks bounded top-level files while the gallery is open and visible. Review
+is the default. The owner can explicitly confirm automatic saving for one exact
+folder, choose its category/tags, and remember its handle in private IndexedDB.
+New validated files may then save without per-item review; existing pending items
+stay pending. Check active grant/revision atomically with each write, retain its
+source receipt, and preserve digest suppression after deletion/reload. Pause is
+persistent; Forget or Clear saved Proof revokes the grant. Startup never prompts
+or expands scope, and backups never carry handles or activate a source. Other
+handles stay in memory. Never add recursive/background account scans or
 infer personal meaning from filenames. Status counts may update automatically;
 saved-Proof retrieval remains user-initiated. Read docs/AUTOMATIC_SOURCES.md.
 Recent Photos does not require Favorites. Optional on-device OCR and metadata

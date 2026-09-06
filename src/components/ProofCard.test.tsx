@@ -1,7 +1,17 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProofItem } from "../lib/proof";
-import { ProofCard } from "./ProofCard";
+import { ProofCard, trustedFolderLabel } from "./ProofCard";
+
+function trustedReceipt(overrides: Record<string, unknown> = {}) {
+  return {
+    method: "trusted_folder", original_filename: "synthetic-photo.png", mime_type: "image/png",
+    sha256: "a".repeat(64), source_id: "11111111-1111-4111-8111-111111111111",
+    source_revision: "22222222-2222-4222-8222-222222222222", source_label: "Synthetic folder",
+    source_approved_at: "2026-09-06T10:00:00.000Z", source_category: "belonging", source_tags: ["synthetic"],
+    automatically_saved_at: "2026-09-06T10:01:00.000Z", ...overrides,
+  };
+}
 
 function proofItem(overrides: Partial<ProofItem> = {}): ProofItem {
   return {
@@ -30,6 +40,34 @@ function proofItem(overrides: Partial<ProofItem> = {}): ProofItem {
 afterEach(cleanup);
 
 describe("ProofCard image truth boundary", () => {
+  it("labels source-level consent separately from missing occurred dates and editable notes", () => {
+    const item = proofItem({ evidenceText: "", occurredOn: null, source: "Synthetic edited source", imagePath: "synthetic-owner/synthetic-photo.png",
+      provenance: { kind: "automatic_media", import_receipt: trustedReceipt() } });
+    render(<ProofCard item={item} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText("Auto-saved from your trusted folder “Synthetic folder”. Source confirmed Sep 6, 2026; no individual review.")).toBeInTheDocument();
+    expect(screen.getByText("MISSING")).toBeInTheDocument();
+    expect(screen.getByText("Synthetic edited source")).toBeInTheDocument();
+    expect(screen.getByText("No note added. The attachment is the evidence.")).toBeInTheDocument();
+  });
+
+  it("keeps source consent historical after the imported attachment changes", () => {
+    render(<ProofCard item={proofItem({ provenance: { kind: "manual", import_receipt: trustedReceipt(), import_attachment_changed: true } })} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText(/^Historical import \(attachment since changed\): Auto-saved from your trusted folder/)).toBeInTheDocument();
+  });
+
+  it.each([
+    { source_id: "not-a-source-id" }, { source_revision: null }, { source_label: "" },
+    { source_approved_at: "not-a-date" }, { automatically_saved_at: null }, { sha256: "incorrect" },
+    { original_filename: "" }, { mime_type: "text/html" }, { source_category: "good_person" }, { source_tags: ["unnormalized TAG"] },
+  ])("does not claim trusted capture from incomplete or invalid receipts: %j", (invalid) => {
+    expect(trustedFolderLabel({ import_receipt: trustedReceipt(invalid) })).toBe("Automatic source metadata unavailable. Do not assume this attachment came from a trusted folder.");
+  });
+
+  it("does not infer source-level consent from provenance kind or ordinary review", () => {
+    expect(trustedFolderLabel({ kind: "automatic_media" })).toBeNull();
+    expect(trustedFolderLabel({ import_receipt: { method: "selected_files" } })).toBeNull();
+  });
+
   it("keeps the derivative label even when the editable source text changes", () => {
     const item = proofItem({ source: "Synthetic edited source", provenance: { import_receipt: {
       method: "mac_photos_companion", companion: { assetIdentifier: "synthetic", originalFilename: "synthetic.heic", originalSha256: "f".repeat(64), representation: "jpeg-preview", captureDate: null, timeZone: "UTC", scope: "Synthetic album" },

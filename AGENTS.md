@@ -15,14 +15,26 @@ chosen album/date range while open, with a separate owner-triggered Photos permi
 It exports private candidate files or explicitly transfers one prepared batch
 over a five-minute same-Mac pairing. Neither route approves Proof or syncs accounts.
 
-- Keep source selection, pending review, approved Proof, and retrieval distinct.
+- Keep source selection, pending review, saved Proof, and retrieval distinct.
+  The owner may explicitly confirm automatic saving for one exact trusted folder.
+  This is source-level approval, not model approval. Default/manual sources remain
+  pending. Never infer a source grant from installation, a model, a backup, another
+  source, or permission to read files. No existing pending item is auto-promoted.
 - Automatic folder intake must use a user-picked read-only handle, explicit Start,
-  bounded top-level enumeration, and pending-only writes through existing media
-  validation. No persisted handle, recursive scan, write permission, login item,
-  or closed-browser collection. Pause/Disconnect/unmount/permission loss must
+  bounded top-level enumeration, and existing media validation. Review-mode handles
+  remain ephemeral. Only explicit trusted-source confirmation may persist the exact
+  handle, consent revision, owner-chosen category/tags, and processed hashes in the
+  private browser database; never in backups, logs, URLs, or a shared account.
+  No recursive scan, write permission, login item, or closed-browser collection.
+  Pause/Disconnect/unmount/permission loss must
   cancel reads and transaction writes; temporary hidden-page/editor suspension
   may resume only an already-running source. Do not rediscover handled unchanged
-  files after review removal within the connection. No dates/meaning from filenames.
+  files after review removal within the connection. Trusted-source digests survive
+  reload so deleted auto-saved bytes do not reappear under the same grant. Pause
+  persists; startup checks permission without prompting. Recheck current active
+  consent and revision in the same atomic transaction as each auto-save and hash
+  ledger write. Revocation and Clear saved Proof forget the remembered grant.
+  Restore never reconnects sources. No dates/meaning from filenames.
 - Automatic intake is not automatic retrieval. Show aggregate source/review
   status without unrequested personal evidence, guilt, urgency, or streaks.
 - Never feed companion output into Restore: that writes saved Proof. Use the
@@ -46,8 +58,11 @@ over a five-minute same-Mac pairing. Neither route approves Proof or syncs accou
   must not gain machine-read quotes, inferred categories, identity, or meaning.
   No OCR result is not negative evidence. Public PhotoKit captions/People labels
   are unavailable here; never invent them or read the Photos database privately.
-- Keep candidates private and out of search until explicit review. Never bypass
-  approval, even if another agent or mode is autonomous.
+- Keep candidates private and out of search until explicit review. The separate
+  trusted-folder path may save new validated media directly only under confirmed,
+  currently active source consent. Preserve its approval receipt; models and
+  autonomous agents cannot create or expand that consent. Unknown dates, text,
+  people and meaning remain blank; category/tags come from the user's source setup.
 - Preserve original media, literal words, sources, and known dates. Do not infer
   love, relationships, identity, goodness, or event dates from an image or filename.
 - Keep photo review note-first. Optional word-based organization must remain

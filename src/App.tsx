@@ -185,7 +185,7 @@ function LocalStart({
           <li>
             <span className="step-number">02</span>
             <h3>Keep what belongs</h3>
-            <p>New media waits in your private review. Add a short note if you want, choose what belongs, and save it. A date you do not know can stay blank.</p>
+            <p>Review new media individually, or explicitly trust a chosen folder to save its media automatically. Add a short note whenever you want. A date you do not know can stay blank.</p>
           </li>
           <li>
             <span className="step-number">03</span>
@@ -286,6 +286,8 @@ function Gallery({
   const [useSemantic, setUseSemantic] = useState(false);
   const [view, setView] = useState<"gallery" | "sources">("gallery");
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [automaticChanges, setAutomaticChanges] = useState(false);
+  const automaticGeneration = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
   const toolsDisclosure = useRef<HTMLDetailsElement>(null);
   const currentItems = useRef(items); currentItems.current = items;
@@ -304,12 +306,14 @@ function Gallery({
   }
 
   async function reload() {
+    const generation = automaticGeneration.current;
     setLoading(true);
     setError(null);
     try {
       setItems(
         isLocal ? await listLocalProofItems() : await listProofItems(),
       );
+      if (generation === automaticGeneration.current) setAutomaticChanges(false);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Proof could not be loaded");
     } finally {
@@ -323,6 +327,12 @@ function Gallery({
     if (!isLocal) return;
 
     const unsubscribe = subscribeToLocalProofChanges((kind) => {
+      if (kind === "source") return;
+      if (kind === "automatic") {
+        automaticGeneration.current++;
+        setAutomaticChanges(true);
+        return;
+      }
       if (kind === "pending") {
         void refreshPendingCount();
         return;
@@ -378,6 +388,17 @@ function Gallery({
     setStorySeedId(null);
     setView(next);
     setShowMediaInbox(false);
+    if (next === "gallery" && automaticChanges) {
+      clearSearch();
+      void reload();
+    }
+  }
+
+  function showAutomaticProof() {
+    if (editingBlocked || editor || backupMode || storySeedId || showMediaInbox) return;
+    setView("gallery");
+    clearSearch();
+    void reload();
   }
 
   function openReview() {
@@ -420,15 +441,36 @@ function Gallery({
     setError(null);
     setNotice(null);
     const controller = new AbortController(); searchRequest.current = controller;
-    const snapshot = items;
+    let snapshot = currentItems.current;
+    const generation = automaticGeneration.current;
     try {
-      const result = isLocal && companion?.semantic && useSemantic && filtered.length
-        ? { items: await semanticCompanionSearch(companion, query, filtered, controller.signal), semanticDegraded: false }
+      // A new request may include auto-saved Proof, but arrival alone must not
+      // change a reading/search already on screen. Keep all on-device paths on
+      // the same fresh, filtered saved snapshot after this explicit request.
+      if (isLocal) {
+        const fresh = await listLocalProofItems();
+        if (controller.signal.aborted || currentItems.current !== snapshot) return;
+        snapshot = fresh;
+        currentItems.current = fresh;
+        setItems(fresh);
+        if (generation === automaticGeneration.current) setAutomaticChanges(false);
+      }
+      const searchSources = snapshot.filter(item =>
+        (!filters.category || item.category === filters.category) &&
+        (!filters.tag || item.tags.includes(filters.tag)));
+      const result = isLocal && companion?.semantic && useSemantic && searchSources.length
+        ? { items: await semanticCompanionSearch(companion, query, searchSources, controller.signal), semanticDegraded: false }
         : isLocal
         ? await searchLocalProofItems(query, filters)
         : await searchProofItems(query, filters);
       if (controller.signal.aborted || currentItems.current !== snapshot) return;
-      setSearchResults(result.items);
+      // Local lexical recall reads storage separately. A different tab may add
+      // Proof during that read; keep results on the requested source revisions
+      // so every displayed result remains available to the same story snapshot.
+      const requestedVersions = new Map(searchSources.map(item => [item.id, item.updatedAt]));
+      setSearchResults(isLocal
+        ? result.items.filter(item => requestedVersions.get(item.id) === item.updatedAt)
+        : result.items);
       setSemanticDegraded(result.semanticDegraded);
     } catch (searchError) {
       if (!controller.signal.aborted) setError(searchError instanceof Error ? searchError.message : "Search failed");
@@ -516,7 +558,7 @@ function Gallery({
     const imageCount = items.filter((item) => item.imagePath).length;
     if (
       !window.confirm(
-        `Remove all ${items.length} saved Proof ${items.length === 1 ? "item" : "items"} and ${imageCount} attachments from this browser profile? Download a backup first. This cannot be undone. Pending review items, downloaded backups, and original files are not removed.`,
+        `Remove all ${items.length} displayed saved Proof ${items.length === 1 ? "item" : "items"}, any newly auto-saved Proof, and their attachments (${imageCount} displayed) from this browser profile? This also forgets trusted-folder approval and stops automatic saving. Download a backup first. This cannot be undone. Pending review items, downloaded backups, and original files are not removed.`,
       )
     ) {
       return;
@@ -650,11 +692,15 @@ function Gallery({
       )}
 
       {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { setNotice(null); clearSearch(); await reload(); }} />}
+      {isLocal && automaticChanges && <div className="automatic-proof-notice" role="status">
+        <p>Your trusted folder has saved new Proof. Your current view has not changed.</p>
+        <button type="button" className="text-button" disabled={editingBlocked || Boolean(editor || backupMode || storySeedId) || showMediaInbox} onClick={showAutomaticProof}>Show newly saved Proof</button>
+      </div>}
       {isLocal && <section className="sources-panel" aria-labelledby="sources-title" hidden={view !== "sources"}>
         <div className="sources-heading">
           <span className="gallery-eyebrow">Make room for the everyday</span>
           <h2 id="sources-title">Your sources, at your pace.</h2>
-          <p>Choose where media comes from. New finds wait in private review until you decide what belongs in your gallery.</p>
+          <p>Choose where media comes from. Review first, or explicitly trust a folder to save its media automatically.</p>
         </div>
         <div className="source-cards">
           <FolderSource suspended={busy || mediaDirty || Boolean(editor || backupMode || storySeedId) || showMediaInbox} onReview={openReview} onCandidatesAdded={() => void refreshPendingCount()} />
