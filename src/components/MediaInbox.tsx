@@ -230,7 +230,7 @@ export function MediaInbox({ busy, onBusyChange, onSaved, onClose, onDirtyStateC
     <p className="media-guidance">File picker: JPEG, PNG, WebP, GIF, MP4, or WebM · 10 MB each · up to 50 files / 48 MiB per batch. Export Apple Photos selections as JPEG, or use the Mac companion for HEIC previews. Direct HEIC and MOV imports are not supported. Clip playback depends on your browser.</p>
     <p className="media-guidance">Local and unencrypted, including original file metadata. This website does not scan your library or keep folder access. No face recognition, AI analysis, or sync. File modification dates are not treated as event dates.</p>
     <p className="media-guidance">The Mac Photos companion can prepare a private review file from a source you allow. Import that file here—not with Restore. This website does not inherit Photos access. Companion dates come from Photos metadata, not an inferred event; HEIC previews are labelled JPEG copies.</p>
-    <p className="media-guidance"><strong>Review items are not in search or backups.</strong> Original files are untouched. Keep them until you save and back up your Proof.</p>
+    <p className="media-guidance"><strong>Review items are not in Proof search.</strong> Encrypted backups include pending media and saved review notes. Save or discard current edits before backing up. Original files are untouched.</p>
     {message && <p className="notice-banner" role="status">{message}</p>}
     {error && <p className="error-banner" role="alert">{error}</p>}
     {externalChange && <p className="notice-banner" role="status">Review has changes to load. Your unsaved details are still here. Saving checks for conflicts; discard edits to reload the latest items.</p>}

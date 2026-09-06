@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  countLocalProofCandidates,
+  deleteLocalProofItem,
   importLocalProofBackup,
   listLocalProofItems,
   releaseLocalProofImageUrls,
@@ -22,6 +24,7 @@ vi.mock("./lib/local-proof-store", () => ({
   LOCAL_PROOF_OWNER_ID: "local-browser-profile",
   clearLocalProofItems: vi.fn().mockResolvedValue(undefined),
   createLocalProofItem: vi.fn(),
+  countLocalProofCandidates: vi.fn().mockResolvedValue(0),
   deleteLocalProofItem: vi.fn(),
   exportLocalProofBackup: vi.fn(),
   importLocalProofBackup: vi.fn(),
@@ -34,6 +37,14 @@ vi.mock("./lib/local-proof-store", () => ({
   }),
   subscribeToLocalProofChanges: vi.fn().mockReturnValue(() => undefined),
   updateLocalProofItem: vi.fn(),
+}));
+vi.mock("./lib/encrypted-backup", () => ({ isEncryptedProofBackup: vi.fn().mockResolvedValue(false) }));
+vi.mock("./components/FolderSource", () => ({
+  FolderSource: ({ suspended, onCandidatesAdded }: { suspended: boolean; onCandidatesAdded: () => void }) => (
+    <section aria-label="Chosen folder source" data-suspended={String(suspended)}>
+      <button type="button" onClick={onCandidatesAdded}>Synthetic new candidate notification</button>
+    </section>
+  ),
 }));
 
 function localItem(): ProofItem {
@@ -60,6 +71,7 @@ function localItem(): ProofItem {
 }
 
 beforeEach(() => {
+  vi.mocked(countLocalProofCandidates).mockResolvedValue(0);
   vi.mocked(listLocalProofItems).mockResolvedValue([]);
   vi.mocked(searchLocalProofItems).mockResolvedValue({
     items: [],
@@ -143,15 +155,18 @@ describe("standalone local storage boundary", () => {
       imported: 2,
       importedCount: 2,
       items: [],
+      pendingImported: 0,
     });
     vi.mocked(requestLocalProofPersistence).mockResolvedValue(true);
     render(<App />);
     fireEvent.click(
       screen.getByRole("button", { name: "Start in this browser" }),
     );
-    await screen.findByRole("button", { name: "Restore" });
+    await screen.findByRole("button", { name: "Add Proof" });
+    fireEvent.click(screen.getByText("More"));
 
-    fireEvent.change(screen.getByLabelText("Restore Proof Gallery backup"), {
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.change(screen.getByLabelText("Backup file"), {
       target: {
         files: [
           new File(["synthetic backup"], "proof-backup.json", {
@@ -160,15 +175,75 @@ describe("standalone local storage boundary", () => {
         ],
       },
     });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and restore" }));
 
     await waitFor(() =>
       expect(requestLocalProofPersistence).toHaveBeenCalledOnce(),
     );
     expect(
       screen.getByText(
-        "2 Proof items restored locally. Keep the backup somewhere private for recovery.",
+        "Restored 2 saved Proof and 0 pending review items. Identical existing items were left unchanged.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("keeps saved Proof when deletion is cancelled", async () => {
+    const item = localItem();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: item.title });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(
+      "Delete this Proof item? This cannot be undone.",
+    );
+    expect(deleteLocalProofItem).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
+    expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
+    expect(screen.queryByText("Proof deleted.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Proof" })).toBeEnabled();
+  });
+
+  it("clears the old deletion notice after successfully restoring the deleted Proof", async () => {
+    const item = localItem();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(listLocalProofItems)
+      .mockResolvedValueOnce([item])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([item]);
+    vi.mocked(deleteLocalProofItem).mockResolvedValueOnce({ cleanupFailed: false });
+    vi.mocked(importLocalProofBackup).mockResolvedValueOnce({
+      imported: 1,
+      importedCount: 1,
+      items: [item],
+      pendingImported: 0,
+    });
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: item.title });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+    expect(screen.getByText("Proof deleted.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("More"));
+    fireEvent.click(screen.getByRole("button", { name: "Restore" }));
+    fireEvent.change(screen.getByLabelText("Backup file"), {
+      target: {
+        files: [new File(["synthetic backup"], "proof-backup.json", { type: "application/json" })],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and restore" }));
+
+    await screen.findByText(
+      "Restored 1 saved Proof and 0 pending review items. Identical existing items were left unchanged.",
+    );
+    expect(screen.getByRole("heading", { name: item.title })).toBeInTheDocument();
+    expect(screen.getByText("1 saved Proof item")).toBeInTheDocument();
+    expect(screen.queryByText("Proof deleted.")).not.toBeInTheDocument();
   });
 
   it("lets a returning local user revisit the shareable landing page", async () => {
@@ -176,6 +251,7 @@ describe("standalone local storage boundary", () => {
     render(<App />);
 
     await screen.findByRole("button", { name: "Add Proof" });
+    fireEvent.click(screen.getByText("More"));
     fireEvent.click(screen.getByRole("button", { name: "About" }));
 
     expect(
@@ -335,5 +411,67 @@ describe("standalone local storage boundary", () => {
     expect(screen.getByRole("button", { name: "Close editor" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("fills a search idea without retrieving evidence until the user submits", async () => {
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Times people valued my work/ }));
+    const search = screen.getByRole("searchbox", { name: "Search your Proof" });
+    expect(search).toHaveValue("Times people valued my work");
+    expect(search).toHaveFocus();
+    expect(searchLocalProofItems).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await waitFor(() => expect(searchLocalProofItems).toHaveBeenCalledOnce());
+  });
+
+  it("keeps a chosen folder mounted across views and suspends it while editing", async () => {
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    const { container } = render(<App />);
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+    const folder = container.querySelector('[aria-label="Chosen folder source"]');
+    expect(folder).not.toBeVisible();
+    expect(folder).toHaveAttribute("data-suspended", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    expect(screen.getByRole("region", { name: "Chosen folder source" })).toBe(folder);
+    fireEvent.click(screen.getByRole("button", { name: "Saved Proof" }));
+    expect(container.querySelector('[aria-label="Chosen folder source"]')).toBe(folder);
+    expect(folder).toHaveAttribute("data-suspended", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Proof" }));
+    expect(folder).toHaveAttribute("data-suspended", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Close editor" }));
+    expect(folder).toHaveAttribute("data-suspended", "false");
+  });
+
+  it("updates only the review count when background media arrives during saved search", async () => {
+    const item = localItem();
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    vi.mocked(searchLocalProofItems).mockResolvedValue({ items: [item], semanticDegraded: true });
+    vi.mocked(countLocalProofCandidates).mockResolvedValue(2);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("button", { name: "Review media, 2 pending" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search your Proof" }), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await screen.findByText("1 search result");
+    const listCalls = vi.mocked(listLocalProofItems).mock.calls.length;
+    const releaseCalls = vi.mocked(releaseLocalProofImageUrls).mock.calls.length;
+
+    vi.mocked(countLocalProofCandidates).mockResolvedValue(3);
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0]?.[0];
+    if (!notify) throw new Error("Local change subscription was not registered");
+    act(() => notify("pending"));
+
+    await screen.findByRole("button", { name: "Review media, 3 pending" });
+    expect(screen.getByText("1 search result")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Search your Proof" })).toHaveValue("synthetic");
+    expect(listLocalProofItems).toHaveBeenCalledTimes(listCalls);
+    expect(releaseLocalProofImageUrls).toHaveBeenCalledTimes(releaseCalls);
+    expect(searchLocalProofItems).toHaveBeenCalledOnce();
   });
 });

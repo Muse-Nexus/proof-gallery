@@ -3,7 +3,7 @@ import { Blob as NodeBlob, File as NodeFile } from "node:buffer";
 import { webcrypto } from "node:crypto";
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from "vitest";
 import { COMPANION_FORMAT, parseCompanionPackage } from "./companion-package";
-import { clearLocalProofItems, clearLocalProofCandidates, stageLocalProofCompanion, listLocalProofCandidates, listLocalProofItems, searchLocalProofItems, exportLocalProofBackup, importLocalProofBackup, resolveLocalProofCandidates, updateLocalProofItem } from "./local-proof-store";
+import { clearLocalProofItems, clearLocalProofCandidates, stageLocalProofCompanion, listLocalProofCandidates, listLocalProofItems, searchLocalProofItems, exportLocalProofBackup, exportLocalProofFullBackup, importLocalProofBackup, resolveLocalProofCandidates, updateLocalProofItem } from "./local-proof-store";
 
 beforeAll(() => {
   vi.stubGlobal("Blob", NodeBlob); vi.stubGlobal("File", NodeFile); vi.stubGlobal("crypto", webcrypto); vi.stubGlobal("BroadcastChannel", undefined);
@@ -19,6 +19,17 @@ async function document(bytes = new Uint8Array([137,80,78,71,13,10,26,10])) {
   }] };
 }
 const file = (value: unknown) => new Blob([JSON.stringify(value)], { type: "application/json" });
+it("cancels companion staging before write and rejects mismatched restored provenance", async () => {
+  const controller = new AbortController(); controller.abort();
+  await expect(stageLocalProofCompanion(file(await document()), controller.signal)).rejects.toThrow();
+  expect(await listLocalProofCandidates()).toHaveLength(0);
+  await stageLocalProofCompanion(file(await document()));
+  const backup = JSON.parse(await (await exportLocalProofFullBackup()).text());
+  await clearLocalProofCandidates();
+  backup.pending[0].companionReceipt.originalSha256 = "0".repeat(64);
+  await expect(importLocalProofBackup(file(backup))).rejects.toThrow("receipt");
+  expect(await listLocalProofCandidates()).toHaveLength(0);
+});
 
 it("stages only private pending photos with no inferred meaning or network calls", async () => {
   const network = vi.spyOn(globalThis, "fetch");

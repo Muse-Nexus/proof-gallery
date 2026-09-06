@@ -9,12 +9,16 @@ silently fall back, sync, co-search, or migrate evidence between them.
 ## Browser-local development
 
 1. Install Bun.
-2. Run `bun install` and `bun run dev`.
-3. Open `http://localhost:5173` and choose **Use this browser**.
+2. Run `bun install --frozen-lockfile` and `bun run dev`.
+3. Open `http://localhost:5173` and choose **Start in this browser**.
 
 Items and image bytes are stored in IndexedDB for that exact browser origin and
 profile. Search is deterministic Proof-only lexical ranking and calls no model,
-Supabase project, Drive, Dropbox, or other provider.
+Supabase project, Drive, Dropbox, or other provider. Optional on-device meaning
+matching stays local too. See [automatic sources](AUTOMATIC_SOURCES.md) for
+explicitly started folder checks. The Mac companion's same-device pairing is
+restricted to the official site origin; self-hosted instances use its review-file
+export/import fallback instead (see [companion setup](COMPANION.md)).
 
 Local mode is not encrypted by Proof Gallery and has no authenticated owner
 identity. Anyone with access to the browser profile, a privileged extension,
@@ -110,13 +114,13 @@ operator's account on push.
 
 ## Local backup and restore
 
-Use the gallery's explicit backup control to download a versioned JSON archive.
-It contains evidence text, metadata, and image bytes in **plaintext**. Protect
-the file like the originals. It may be saved locally or manually placed in a
-private Google Drive or Dropbox folder; that is user-managed file storage, not
-a connector or background sync. SHA-256 receipts cover each item and image to
-detect corruption, but they do not prove who created the file and provide no
-encryption.
+Use **Back up** to create a passphrase-encrypted `.proof` archive containing
+saved Proof, pending media, and saved review notes. The passphrase is not stored
+or recoverable. Older version-1/2 plaintext JSON files still restore. Manual
+Drive/Dropbox storage is not a connector or background sync. Encryption protects
+the downloaded file, not the active browser database; SHA receipts detect
+corruption rather than establishing source authorship. Exact formats, limits,
+conflicts, and recovery caveats: [private completion contract](PRIVATE_COMPLETION.md).
 
 Restore is also user-initiated and accepts a supported, validated archive. Test
 restore before depending on a backup. Browser persistence is best-effort and is

@@ -3,10 +3,25 @@
 ## Optional Mac Photos companion
 
 The separate [Mac companion](COMPANION.md) can request a Photos grant and watch
-a user-selected album/recent Favorites scope only while active. Web permission
+a user-selected Recent Photos/Favorites/album date scope only while active. Web permission
 does not inherit that grant. Photos are exported to an owner-selected local
-review file, then explicitly imported into pending review. No automatic saved
-Proof, cloud upload, iCloud download, or localhost server is introduced.
+review file or an explicitly paired same-Mac connection, then imported into
+pending review. No automatic saved Proof or cloud upload is introduced. The
+five-minute loopback server is documented in [the private connection contract](PRIVATE_COMPLETION.md).
+iCloud downloading is
+a separate off-by-default option for one bounded batch, not a continuing grant.
+It uses Apple Photos to retrieve existing originals and switches off on Pause
+or completion. No general network entitlement is added. Apple's cache/network
+traffic can exceed our retained-media limits; downloaded originals may remain
+cached after Pause. This does not authorize cloud AI processing or uploads.
+
+An off-by-default toggle permits on-device Apple Vision text recognition within
+that selected source. It operates on a bounded preview off the main thread;
+Pause cancels the request and generation checks discard late results. Excerpts
+are unverified native-memory review aids, not quotes or semantic judgments.
+They and metadata cue flags are omitted from the unchanged v1 export. Clear,
+remove, disconnect, or quitting removes the corresponding native cues. No GPS,
+caption, People label, or additional album membership lookup is performed.
 
 HEIC JPEG previews are labelled derivatives with original-resource digest/name
 receipts; original HEIC bytes remain in Photos. Original supported media may
@@ -19,8 +34,14 @@ browser storage remain unencrypted. See the companion guide for full limits.
 
 Local media intake adds a separate `proof_candidates` IndexedDB store (database
 version 2). Pending original photos/clips and details are unencrypted, private
-only to the browser profile, and excluded from saved-Proof search and backups.
-File selection or a selected folder is a one-time import, not a continuing grant.
+only to the browser profile, and excluded from saved-Proof search. Encrypted full
+backups include pending media and saved draft notes; legacy saved-only exports do not.
+Ordinary file/folder selection is a one-time import. The separate folder source
+uses a read-only directory handle and explicit Start for bounded checks while
+the gallery is open and visible. Its handle stays in memory; Pause/Disconnect
+cancel work, and reload ends the connection. No subfolders are read. Incoming
+media still passes the existing pending-only validator. Full scope, limits,
+permission semantics, and cancellation are in [automatic sources](AUTOMATIC_SOURCES.md).
 No account connector, OCR, face recognition, or AI image analysis runs.
 
 Approval validates container signatures and SHA-256 against stored bytes, checks
@@ -44,14 +65,16 @@ Related-Proof lookup and the story reading view use only the already-loaded
 saved collection, additionally filtered to the same owner and `personal`
 visibility. They do not search pending candidates, another mode, or ordinary
 memories. Lookup and story opening are user-initiated; related story moments
-require individual selection. Stories are derived UI state, not generated or
-persisted records. No extra evidence/model request, schema, embedding, telemetry,
-or backup content is introduced. Existing stored-attachment preview handling and
+require individual selection. Stories are derived UI state, not persisted
+evidence. Optional paired-Mac tools can match by meaning or select complete
+saved notes for a reading; they do not rewrite them or upload to cloud models.
+Existing stored-attachment preview handling and
 companion derivative labels apply in the story view too.
 
 Version-2 local backups include approved photo/video attachments and allow an
 empty note only with a real attachment; version-1 photo/text archives remain
-readable. Pending review is excluded. Removing saved Proof does not remove
+readable. Pending review is excluded from these older formats, but included in
+the default encrypted full backup. Removing saved Proof does not remove
 pending files: select them in the inbox and use Remove from review. Neither
 action deletes original files or downloaded backups. No data is copied from
 ChorOS automatically, and a manually authorized copy is separate, not synced.
@@ -85,12 +108,14 @@ merge the two collections.
 
 Local mode makes no evidence or search request to Supabase or an embedding
 provider. Retrieval is deterministic lexical ranking over Proof items in the
-selected IndexedDB database; it is not semantic search and does not invoke a
-model. Drive and Dropbox are not connected or queried.
+selected IndexedDB database by default. Optional same-Mac pairing adds explicit
+on-device meaning matching and full-note reading selection, never automatic
+retrieval or cloud inference. Drive and Dropbox are not connected or queried.
 
 "Local" describes storage location, not an authenticated owner boundary:
 
-- Proof Gallery does not encrypt local items, images, or backups.
+- Proof Gallery does not encrypt the active local database. Default downloaded
+  full backups are encrypted; older JSON and companion review files are not.
 - Anyone who can use the same browser profile may be able to open the gallery.
 - Privileged browser extensions, device administrators, malware, browser
   debugging tools, and JavaScript that executes on the same origin may be able
@@ -104,12 +129,13 @@ model. Drive and Dropbox are not connected or queried.
   hostname that serves no unrelated or third-party JavaScript when storage
   isolation matters.
 
-The app can create a user-initiated, versioned JSON backup and restore a
-supported backup after validation. The archive is portable **plaintext**. The
-user may keep it in a private local folder or manually place it in a private
-Google Drive or Dropbox folder, but Proof Gallery does not upload, watch, or
-sync that folder. Item and image SHA-256 receipts detect corruption; they do
-not authenticate or encrypt a backup. Protect access to every exported copy.
+The app creates user-initiated, passphrase-encrypted full backups and restores
+supported archives after validation. Forgotten passphrases cannot be recovered.
+The user may store them privately on disk, Drive, or Dropbox; Proof Gallery does
+not upload, watch, or sync that folder. Item/media SHA receipts detect corruption,
+not source authorship. Restore is atomic, preserves pending review, and rejects
+conflicts. Restoring old backups can resurrect deleted items: there are no deletion
+tombstones. See [the exact security contract](PRIVATE_COMPLETION.md).
 
 Removing local Proof data clears records controlled by this origin. It cannot
 remove downloaded backups, original source files, copies made by other
@@ -172,8 +198,9 @@ the private Supabase lexical path instead.
 
 All source access is user-initiated. The web gallery does not search or mine Drive,
 Dropbox, email, photos, messages, finance, ordinary memories, or other accounts.
-It does not run background collection or automatically surface evidence during
-distress. The selected-media review inbox does not grant connector or library
+The explicitly started folder source checks selected files while the visible
+gallery is open. It does not collect after the browser closes or automatically
+surface evidence during distress. The review inbox does not grant connector or library
 access. The optional native companion has its own bounded Photos source and
 active-session observer, not general account mining. Any further collector must
 preserve that review boundary and add explicit source permissions, revocation,

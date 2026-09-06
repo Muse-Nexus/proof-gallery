@@ -7,8 +7,13 @@ let package = Package(
     products: [.executable(name: "ProofPhotosCompanion", targets: ["ProofPhotosCompanion"])],
     targets: [
         .target(name: "CompanionCore"),
-        .executableTarget(name: "ProofPhotosCompanion", dependencies: ["CompanionCore"]),
+        .target(name: "CompanionVision", dependencies: ["CompanionCore"]),
+        .target(name: "CompanionIntelligence", dependencies: ["CompanionCore"]),
+        .executableTarget(name: "ProofPhotosCompanion", dependencies: ["CompanionCore", "CompanionVision", "CompanionIntelligence"]),
         .testTarget(name: "CompanionCoreTests", dependencies: ["CompanionCore"]),
+        .testTarget(name: "CompanionVisionTests", dependencies: ["CompanionVision"]),
+        .testTarget(name: "CompanionIntelligenceTests", dependencies: ["CompanionIntelligence"]),
+        .testTarget(name: "CompanionBridgeTests", dependencies: ["ProofPhotosCompanion"]),
     ],
     swiftLanguageModes: [.v5]
 )
