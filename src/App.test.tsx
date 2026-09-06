@@ -404,6 +404,7 @@ describe("standalone local storage boundary", () => {
     expect(screen.getByLabelText("Category")).toBeDisabled();
     expect(screen.getByLabelText("Tag")).toBeDisabled();
 
+    await waitFor(() => expect(searchLocalProofItems).toHaveBeenCalledOnce());
     await act(async () => finishSearch({ items: [item], semanticDegraded: true }));
     const edit = screen.getByRole("button", { name: "Edit" });
     expect(edit).toBeEnabled();
@@ -473,5 +474,98 @@ describe("standalone local storage boundary", () => {
     expect(listLocalProofItems).toHaveBeenCalledTimes(listCalls);
     expect(releaseLocalProofImageUrls).toHaveBeenCalledTimes(releaseCalls);
     expect(searchLocalProofItems).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an active search intact when automatic Proof arrives until explicitly opened", async () => {
+    const item = localItem();
+    const added = { ...item, id: "33333333-3333-4333-8333-333333333333", title: "Synthetic auto-saved photo" };
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    vi.mocked(searchLocalProofItems).mockResolvedValue({ items: [item], semanticDegraded: true });
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("1 saved Proof item");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await screen.findByText("1 search result");
+    const listCalls = vi.mocked(listLocalProofItems).mock.calls.length;
+    const releaseCalls = vi.mocked(releaseLocalProofImageUrls).mock.calls.length;
+    vi.mocked(listLocalProofItems).mockResolvedValue([item, added]);
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
+    act(() => notify("automatic"));
+    expect(screen.getByText("1 search result")).toBeInTheDocument();
+    expect(screen.getByRole("searchbox")).toHaveValue("synthetic");
+    expect(screen.queryByText(added.title)).not.toBeInTheDocument();
+    expect(listLocalProofItems).toHaveBeenCalledTimes(listCalls);
+    expect(releaseLocalProofImageUrls).toHaveBeenCalledTimes(releaseCalls);
+    fireEvent.click(screen.getByRole("button", { name: "Show newly saved Proof" }));
+    expect(await screen.findByText(added.title)).toBeInTheDocument();
+    expect(screen.getByText("2 saved Proof items")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show newly saved Proof" })).not.toBeInTheDocument();
+  });
+
+  it("loads newly auto-saved sources for a new search and its requested story", async () => {
+    const item = { ...localItem(), title: "Synthetic newly saved source" };
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("Your local gallery is empty");
+    vi.mocked(listLocalProofItems).mockResolvedValue([item]);
+    vi.mocked(searchLocalProofItems).mockResolvedValue({ items: [item], semanticDegraded: true });
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
+    act(() => notify("automatic"));
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await screen.findByText("1 search result");
+    fireEvent.click(screen.getByRole("button", { name: "Read as a story" }));
+    expect(screen.getByRole("heading", { name: "A story in your own words" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show newly saved Proof" })).not.toBeInTheDocument();
+  });
+
+  it("does not reload evidence when source consent changes in another tab", async () => {
+    vi.mocked(listLocalProofItems).mockResolvedValue([localItem()]);
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("1 saved Proof item");
+    const calls = vi.mocked(listLocalProofItems).mock.calls.length;
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
+    act(() => notify("source"));
+    expect(listLocalProofItems).toHaveBeenCalledTimes(calls);
+    expect(screen.getByText(localItem().title)).toBeInTheDocument();
+  });
+
+  it("defers arrivals and changed revisions during recall until a new explicit source snapshot", async () => {
+    const original = localItem();
+    const older = { ...original, id: "22222222-2222-4222-8222-222222222222", title: "Synthetic earlier revision" };
+    const changed = { ...older, title: "Synthetic revised source", updatedAt: "2026-09-06T12:00:00.000Z", relevance: 0.8 };
+    const added = { ...original, id: "33333333-3333-4333-8333-333333333333", title: "Synthetic later arrival", relevance: 0.9 };
+    const matches = { items: [added, changed, { ...original, relevance: 0.7 }], semanticDegraded: true };
+    let finishSearch!: (value: Awaited<ReturnType<typeof searchLocalProofItems>>) => void;
+    vi.mocked(listLocalProofItems).mockResolvedValue([original, older]);
+    vi.mocked(searchLocalProofItems).mockImplementationOnce(() => new Promise(resolve => { finishSearch = resolve; }));
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByText("2 saved Proof items");
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "synthetic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await waitFor(() => expect(searchLocalProofItems).toHaveBeenCalledOnce());
+
+    vi.mocked(listLocalProofItems).mockResolvedValue([original, changed, added]);
+    const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
+    act(() => notify("automatic"));
+    await act(async () => finishSearch(matches));
+    expect(screen.getByText("1 search result")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: added.title })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: changed.title })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show newly saved Proof" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Read as a story" }));
+    expect(screen.getByRole("heading", { name: original.title, level: 3 })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close story" }));
+
+    vi.mocked(searchLocalProofItems).mockResolvedValue(matches);
+    fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
+    await screen.findByText("3 search results");
+    expect(screen.queryByRole("button", { name: "Show newly saved Proof" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).filter(heading => heading.closest(".proof-card")).map(heading => heading.textContent)).toEqual([added.title, changed.title, original.title]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Read as a story" })[0]);
+    expect(screen.getByRole("heading", { name: added.title, level: 3 })).toBeInTheDocument();
   });
 });

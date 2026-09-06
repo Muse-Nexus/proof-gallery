@@ -14,13 +14,16 @@ import { LOCAL_MEDIA_TYPES, validateLocalProofMedia } from "./media";
 import { parseCompanionPackage, validateCompanionReceipt, type CompanionReceipt } from "./companion-package";
 import type { ProofSearchResult } from "./proof-api";
 import { MAX_FULL_BACKUP_BYTES } from "./encrypted-backup";
+import type { ProofFolder } from "./folder-source";
 
 export const LOCAL_PROOF_OWNER_ID = "local-browser-owner";
 
 const DATABASE_NAME = "muse-nexus-proof-gallery-local";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const ITEM_STORE = "proof_items";
 const CANDIDATE_STORE = "proof_candidates";
+const SOURCE_GRANT_STORE = "source_grants";
+const MAX_SOURCE_DIGESTS = 2_000;
 const BACKUP_FORMAT = "muse-nexus-proof-gallery-backup";
 const BACKUP_VERSION = 2;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -114,12 +117,27 @@ export type LocalProofCandidate = Omit<CandidateRecord, "blob" | "digest"> & {
   size: number;
 };
 
+/** Browser-profile consent, not an account grant. Handles never enter backups. */
+export type TrustedFolderSource = {
+  id: string;
+  revision: string;
+  userId: typeof LOCAL_PROOF_OWNER_ID;
+  visibility: typeof PROOF_VISIBILITY;
+  handle: ProofFolder;
+  label: string;
+  category: ProofCategory;
+  tags: string[];
+  approvedAt: string;
+  paused: boolean;
+  processedDigests: string[];
+};
+
 const objectUrlCache = new Map<
   string,
   { revision: string; url: string }
 >();
 let databasePromise: Promise<IDBDatabase> | null = null;
-type LocalProofChangeKind = "change" | "clear" | "pending";
+type LocalProofChangeKind = "change" | "clear" | "pending" | "automatic" | "source";
 const changeListeners = new Set<(kind: LocalProofChangeKind) => void>();
 let incomingChangeChannel: BroadcastChannel | null = null;
 
@@ -144,6 +162,9 @@ function createChangeChannel(): BroadcastChannel | null {
 }
 
 function publishLocalProofChange(kind: LocalProofChangeKind): void {
+  // Automatic intake reports aggregate status only; consumers must not reveal
+  // new evidence or reset the user's current reading/search without a request.
+  if (kind === "automatic" || kind === "source") deliverLocalProofChange(kind);
   const channel = incomingChangeChannel ?? createChangeChannel();
   if (!channel) return;
   try {
@@ -164,7 +185,7 @@ export function subscribeToLocalProofChanges(
     incomingChangeChannel = createChangeChannel();
     if (incomingChangeChannel) {
       incomingChangeChannel.onmessage = (event: MessageEvent<unknown>) => {
-        if (event.data === "change" || event.data === "clear" || event.data === "pending") {
+        if (event.data === "change" || event.data === "clear" || event.data === "pending" || event.data === "automatic" || event.data === "source") {
           deliverLocalProofChange(event.data);
         }
       };
@@ -203,6 +224,9 @@ function openDatabase(): Promise<IDBDatabase> {
       }
       if (!database.objectStoreNames.contains(CANDIDATE_STORE)) {
         database.createObjectStore(CANDIDATE_STORE, { keyPath: "id" });
+      }
+      if (!database.objectStoreNames.contains(SOURCE_GRANT_STORE)) {
+        database.createObjectStore(SOURCE_GRANT_STORE, { keyPath: "id" });
       }
     };
     request.onerror = () => {
@@ -1667,12 +1691,220 @@ export async function importLocalProofBackup(
 
 export async function clearLocalProofItems(): Promise<void> {
   const database = await openDatabase();
-  const transaction = database.transaction(ITEM_STORE, "readwrite");
+  // Clearing saved Proof also revokes remembered automation in this same
+  // transaction. An in-flight watcher can never silently refill the gallery.
+  const transaction = database.transaction([ITEM_STORE, SOURCE_GRANT_STORE], "readwrite");
   const idsPromise = requestResult(transaction.objectStore(ITEM_STORE).getAllKeys());
   const clearPromise = requestResult(transaction.objectStore(ITEM_STORE).clear());
-  const [ids] = await Promise.all([idsPromise, clearPromise, transactionComplete(transaction)]);
+  const revokePromise = requestResult(transaction.objectStore(SOURCE_GRANT_STORE).clear());
+  const [ids] = await Promise.all([idsPromise, clearPromise, revokePromise, transactionComplete(transaction)]);
   for (const id of ids) revokeImageUrl(String(id));
+  deliverLocalProofChange("source");
   publishLocalProofChange("clear");
+}
+
+function validateTrustedFolderSource(value: unknown): TrustedFolderSource {
+  if (!isPlainObject(value)) throw new Error("Remembered source is invalid");
+  assertExactKeys(value, ["id", "revision", "userId", "visibility", "handle", "label", "category", "tags", "approvedAt", "paused", "processedDigests"], "Remembered source");
+  if (value.userId !== LOCAL_PROOF_OWNER_ID || value.visibility !== PROOF_VISIBILITY) {
+    throw new Error("Remembered source belongs to another owner or is not private");
+  }
+  // FileSystemDirectoryHandle is a browser-owned structured-clone type, not
+  // JSON. Never traverse or serialize the handle, and never reconstruct one.
+  const handle = value.handle as ProofFolder | null;
+  if (!handle || handle.kind !== "directory" || typeof handle.name !== "string") {
+    throw new Error("Remembered source must contain the selected folder handle");
+  }
+  if (!isProofCategory(value.category) || typeof value.paused !== "boolean") {
+    throw new Error("Remembered source settings are invalid");
+  }
+  if (!Array.isArray(value.processedDigests) || value.processedDigests.length > MAX_SOURCE_DIGESTS ||
+      value.processedDigests.some(digest => typeof digest !== "string" || !/^[a-f0-9]{64}$/.test(digest)) ||
+      new Set(value.processedDigests).size !== value.processedDigests.length) {
+    throw new Error("Remembered source digest history is invalid");
+  }
+  return {
+    id: uuid(value.id, "Source id"), revision: uuid(value.revision, "Source revision"),
+    userId: LOCAL_PROOF_OWNER_ID, visibility: PROOF_VISIBILITY, handle,
+    label: requiredString(value.label, "Source label", 200), category: value.category,
+    tags: validateTags(value.tags), approvedAt: isoTimestamp(value.approvedAt, "Source approval time"),
+    paused: value.paused, processedDigests: [...value.processedDigests] as string[],
+  };
+}
+
+/** Restoring consent only loads metadata; it never requests permission or reads files. */
+export async function getTrustedFolderSource(): Promise<TrustedFolderSource | null> {
+  const db = await openDatabase();
+  const tx = db.transaction(SOURCE_GRANT_STORE, "readonly");
+  const [rows] = await Promise.all([requestResult(tx.objectStore(SOURCE_GRANT_STORE).getAll()), transactionComplete(tx)]);
+  if (rows.length > 1) throw new Error("Only one remembered folder source is supported");
+  return rows.length ? validateTrustedFolderSource(rows[0]) : null;
+}
+
+/** Call only after the owner explicitly confirms this exact folder for auto-save. */
+export async function confirmTrustedFolderSource(
+  handle: ProofFolder, category: ProofCategory, tags: string[], label = handle.name,
+): Promise<TrustedFolderSource> {
+  const record = validateTrustedFolderSource({
+    id: crypto.randomUUID(), revision: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
+    visibility: PROOF_VISIBILITY, handle, label: cleanedRequiredString(label, "Source label", 200),
+    category, tags: inputTags(tags), approvedAt: new Date().toISOString(), paused: false, processedDigests: [],
+  });
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(SOURCE_GRANT_STORE, "readwrite");
+    let failure: unknown;
+    const count = tx.objectStore(SOURCE_GRANT_STORE).count();
+    count.onsuccess = () => {
+      try {
+        if (count.result !== 0) throw new Error("Forget the remembered folder before trusting another source");
+        tx.objectStore(SOURCE_GRANT_STORE).add(record);
+      } catch (error) { failure = error; tx.abort(); }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("This browser could not remember the selected folder"));
+  });
+  publishLocalProofChange("source");
+  return record;
+}
+
+async function changeTrustedFolderSource(id: string, revision: string, active: boolean | null): Promise<TrustedFolderSource | null> {
+  uuid(id, "Source id"); uuid(revision, "Source revision");
+  const db = await openDatabase();
+  const result = await new Promise<TrustedFolderSource | null>((resolve, reject) => {
+    const tx = db.transaction(SOURCE_GRANT_STORE, "readwrite");
+    let failure: unknown;
+    let updated: TrustedFolderSource | null = null;
+    const request = tx.objectStore(SOURCE_GRANT_STORE).get(id);
+    request.onsuccess = () => {
+      try {
+        if (!request.result) throw new Error("This source was forgotten. Refresh Sources before continuing");
+        const current = validateTrustedFolderSource(request.result);
+        if (current.revision !== revision) throw new Error("This source changed in another tab. Refresh Sources before continuing");
+        if (active === null) tx.objectStore(SOURCE_GRANT_STORE).delete(id);
+        else {
+          updated = { ...current, revision: crypto.randomUUID(), paused: !active };
+          tx.objectStore(SOURCE_GRANT_STORE).put(updated);
+        }
+      } catch (error) { failure = error; tx.abort(); }
+    };
+    tx.oncomplete = () => resolve(updated);
+    tx.onerror = tx.onabort = () => reject(failure ?? tx.error ?? new Error("Remembered source could not be changed"));
+  });
+  publishLocalProofChange("source");
+  return result;
+}
+
+export async function setTrustedFolderActive(id: string, revision: string, active: boolean): Promise<TrustedFolderSource> {
+  if (typeof active !== "boolean") throw new Error("Choose whether this source is active");
+  return (await changeTrustedFolderSource(id, revision, active))!;
+}
+
+export async function forgetTrustedFolderSource(id: string, revision: string): Promise<void> {
+  await changeTrustedFolderSource(id, revision, null);
+}
+
+/**
+ * Exact-source consent is the only direct-to-saved import path. Validation is
+ * outside IDB; the current grant, dedup ledger, capacity and save are one atomic
+ * transaction. A stale tab or canceled read cannot reuse revoked consent.
+ */
+export async function stageTrustedFolderMedia(
+  id: string, revision: string, files: readonly File[], signal?: AbortSignal,
+): Promise<{ added: number; duplicates: number; rejected: { name: string; reason: string }[] }> {
+  signal?.throwIfAborted();
+  uuid(id, "Source id"); uuid(revision, "Source revision");
+  if (files.length > 50 || files.reduce((sum, file) => sum + file.size, 0) > MAX_BACKUP_IMAGE_BYTES) {
+    throw new Error("Choose up to 50 files and 48 MiB per batch. Nothing from this batch was imported.");
+  }
+  const prepared: { name: string; blob: Blob; digest: string }[] = [];
+  const rejected: { name: string; reason: string }[] = [];
+  for (const file of files) {
+    signal?.throwIfAborted();
+    try {
+      await validateLocalProofMedia(file);
+      signal?.throwIfAborted();
+      const name = requiredString(file.name, "Original filename", 1024);
+      const blob = file.slice(0, file.size, file.type);
+      const digest = await sha256(blob);
+      signal?.throwIfAborted();
+      prepared.push({ name, blob, digest });
+    } catch (error) {
+      signal?.throwIfAborted();
+      rejected.push({ name: file.name, reason: error instanceof Error ? error.message : "Unsupported file" });
+    }
+  }
+  const db = await openDatabase();
+  signal?.throwIfAborted();
+  const result = await new Promise<{ added: number; duplicates: number }>((resolve, reject) => {
+    const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE, SOURCE_GRANT_STORE], "readwrite");
+    const savedRequest = tx.objectStore(ITEM_STORE).getAll();
+    const pendingRequest = tx.objectStore(CANDIDATE_STORE).getAll();
+    const grantRequest = tx.objectStore(SOURCE_GRANT_STORE).get(id);
+    let saved: LocalProofRecord[] | null = null;
+    let pending: CandidateRecord[] | null = null;
+    let grant: TrustedFolderSource | null = null;
+    let added = 0;
+    let duplicates = 0;
+    let failure: unknown;
+    const abort = (error: unknown) => { failure = error; try { tx.abort(); } catch { /* The transaction already settled. */ } };
+    const cancel = () => abort(new DOMException("Automatic save canceled before commit", "AbortError"));
+    signal?.addEventListener("abort", cancel, { once: true });
+    const insert = () => {
+      if (!saved || !pending || !grant) return;
+      try {
+        signal?.throwIfAborted();
+        if (grant.paused || grant.revision !== revision) throw new Error("Automatic save stopped because source consent changed or is paused");
+        const processed = new Set(grant.processedDigests);
+        const seen = new Set([...saved.map(item => item.imageDigest), ...pending.map(item => item.digest), ...processed]);
+        let bytes = saved.reduce((sum, item) => sum + (item.imageBlob?.size ?? 0), 0);
+        const timestamp = new Date().toISOString();
+        for (const media of prepared) {
+          processed.add(media.digest);
+          if (processed.size > MAX_SOURCE_DIGESTS) throw new Error("This source has handled 2,000 media files. Pause and review its scope before connecting a fresh source. This batch was not saved.");
+          // Never approve an existing pending item, even after its review is removed.
+          if (seen.has(media.digest)) { duplicates++; continue; }
+          bytes += media.blob.size;
+          if (saved.length + added >= MAX_BACKUP_ITEMS || bytes > MAX_BACKUP_IMAGE_BYTES) {
+            throw new Error("Saved Proof is full (10,000 items or 48 MiB of media). This batch was not saved. Make an encrypted backup and remove unneeded items before resuming.");
+          }
+          const source = `Trusted folder: ${media.name.slice(0, 480)}`;
+          const fields = canonicalInput({ title: media.name.slice(0, 200), evidenceText: "", occurredOn: null,
+            category: grant.category, sourceType: media.blob.type.startsWith("image/") ? "photo" : "other",
+            source, tags: grant.tags, person: null, project: null }, true);
+          const record = validateStoredRecord({ ...fields, id: crypto.randomUUID(), userId: LOCAL_PROOF_OWNER_ID,
+            createdAt: timestamp, updatedAt: timestamp, imageBlob: media.blob, imageName: media.name,
+            imageRevision: crypto.randomUUID(), imageDigest: media.digest,
+            provenance: { ...fields.provenance, kind: "automatic_media", import_receipt: {
+              method: "trusted_folder", original_filename: media.name, mime_type: media.blob.type, sha256: media.digest,
+              source_id: grant.id, source_revision: grant.revision, source_label: grant.label,
+              source_approved_at: grant.approvedAt, source_category: grant.category, source_tags: grant.tags,
+              automatically_saved_at: timestamp,
+            } },
+          });
+          tx.objectStore(ITEM_STORE).add(record);
+          signal?.throwIfAborted();
+          seen.add(media.digest);
+          added++;
+        }
+        if (processed.size !== grant.processedDigests.length) {
+          tx.objectStore(SOURCE_GRANT_STORE).put({ ...grant, processedDigests: [...processed] });
+        }
+      } catch (error) { abort(error); }
+    };
+    savedRequest.onsuccess = () => { try { saved = savedRequest.result.map(validateStoredRecord); insert(); } catch (error) { abort(error); } };
+    pendingRequest.onsuccess = () => { try { pending = pendingRequest.result.map(validateCandidate); insert(); } catch (error) { abort(error); } };
+    grantRequest.onsuccess = () => {
+      try {
+        if (!grantRequest.result) throw new Error("Automatic save stopped because the source was forgotten");
+        grant = validateTrustedFolderSource(grantRequest.result); insert();
+      } catch (error) { abort(error); }
+    };
+    tx.oncomplete = () => { signal?.removeEventListener("abort", cancel); resolve({ added, duplicates }); };
+    tx.onerror = tx.onabort = () => { signal?.removeEventListener("abort", cancel); reject(failure ?? tx.error ?? new Error("Automatic save failed")); };
+  });
+  if (result.added > 0) publishLocalProofChange("automatic");
+  return { ...result, rejected };
 }
 
 function candidateInput(input: CandidateInput): CandidateInput {

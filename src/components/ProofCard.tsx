@@ -1,11 +1,41 @@
 import {
   categoryLabel,
   formatProofDate,
+  isProofCategory,
+  normalizeTags,
   sourceTypeLabel,
   type ProofItem,
 } from "../lib/proof";
 import { ProofMedia } from "./ProofMedia";
 import { validateCompanionReceipt } from "../lib/companion-package";
+import { LOCAL_MEDIA_TYPES } from "../lib/media";
+
+const UUID_RECEIPT = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function receiptTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return false;
+  return new Date(value).toISOString() === value;
+}
+
+/** A display receipt describes historical consent, never current source permission. */
+export function trustedFolderLabel(provenance: ProofItem["provenance"]): string | null {
+  const receipt = provenance.import_receipt;
+  if (!receipt || typeof receipt !== "object" || !("method" in receipt) || receipt.method !== "trusted_folder") return null;
+  const source = receipt as Record<string, unknown>;
+  if (typeof source.source_id !== "string" || !UUID_RECEIPT.test(source.source_id) ||
+      typeof source.source_revision !== "string" || !UUID_RECEIPT.test(source.source_revision) ||
+      typeof source.source_label !== "string" || !source.source_label.trim() || source.source_label.length > 200 ||
+      !receiptTimestamp(source.source_approved_at) || !receiptTimestamp(source.automatically_saved_at) ||
+      typeof source.original_filename !== "string" || !source.original_filename || source.original_filename.length > 1024 ||
+      typeof source.mime_type !== "string" || !LOCAL_MEDIA_TYPES.has(source.mime_type) ||
+      typeof source.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.sha256) ||
+      !isProofCategory(source.source_category) || !Array.isArray(source.source_tags) || source.source_tags.length > 30 ||
+      !source.source_tags.every((tag): tag is string => typeof tag === "string" && tag.length > 0 && tag.length <= 80) ||
+      JSON.stringify(normalizeTags(source.source_tags)) !== JSON.stringify(source.source_tags)) {
+    return "Automatic source metadata unavailable. Do not assume this attachment came from a trusted folder.";
+  }
+  return `${provenance.import_attachment_changed ? "Historical import (attachment since changed): " : ""}Auto-saved from your trusted folder “${source.source_label}”. Source confirmed ${formatProofDate(source.source_approved_at)}; no individual review.`;
+}
 
 export function companionLabel(provenance: ProofItem["provenance"]): string | null {
   const receipt = provenance.import_receipt;
@@ -31,7 +61,7 @@ export function ProofCard({
 }) {
   const hasEvidenceAttachment = Boolean(item.imagePath);
   const hasEvidencePreview = Boolean(item.imagePath && item.imageUrl);
-  const importedMediaLabel = companionLabel(item.provenance);
+  const importedMediaLabel = companionLabel(item.provenance) ?? trustedFolderLabel(item.provenance);
 
   return (
     <article

@@ -167,7 +167,7 @@ describe("private local media review", () => {
     await stageLocalProofMedia([png()]);
     const [candidate] = await listLocalProofCandidates();
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("muse-nexus-proof-gallery-local", 2);
+      const request = indexedDB.open("muse-nexus-proof-gallery-local");
       request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
     });
     await new Promise<void>((resolve, reject) => {

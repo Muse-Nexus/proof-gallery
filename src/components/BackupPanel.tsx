@@ -27,7 +27,7 @@ export function BackupPanel({ mode, onClose, onRestored, onBusyChange, blocked }
       } else {
         if (!file) throw new Error("Choose a backup first.");
         const payload = await isEncryptedProofBackup(file) ? await decryptProofBackup(file, password) : file;
-        if (!window.confirm("Restore this backup? Conflicts cancel the entire restore. Previously deleted items in this backup may return. Pending items will remain pending.")) return;
+        if (!window.confirm("Restore this backup? Conflicts cancel the entire restore. Previously deleted items in this backup may return. Pending items will remain pending. Backups do not reconnect or enable trusted sources.")) return;
         const result = await importLocalProofBackup(payload);
         await requestLocalProofPersistence();
         await onRestored();
@@ -40,6 +40,7 @@ export function BackupPanel({ mode, onClose, onRestored, onBusyChange, blocked }
   return <section className="backup-panel" aria-labelledby="backup-title">
     <h2 id="backup-title" ref={heading} tabIndex={-1}>{mode === "export" ? "Encrypted backup" : "Restore a backup"}</h2>
     <p>Includes saved Proof and pending photos with their saved notes. This protects the downloaded file—not the active data in this browser. Forgotten passphrases cannot be recovered.</p>
+    <p>Folder permissions and trusted-source connections are not included. Restoring a backup does not reconnect or enable sources.</p>
     <form onSubmit={event => void submit(event)}>
       <fieldset disabled={busy || blocked}>
       {mode === "restore" && <label>Backup file<input type="file" accept=".proof,.json,application/json,application/octet-stream" disabled={busy} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>}

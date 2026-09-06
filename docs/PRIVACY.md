@@ -32,15 +32,22 @@ browser storage remain unencrypted. See the companion guide for full limits.
 
 ## Selected-media review (local mode)
 
-Local media intake adds a separate `proof_candidates` IndexedDB store (database
-version 2). Pending original photos/clips and details are unencrypted, private
+Local media intake uses a separate `proof_candidates` IndexedDB store. Database
+version 3 adds private source grants for explicit trusted-folder consent, without
+changing existing saved or pending records. Pending photos/clips and details are unencrypted, private
 only to the browser profile, and excluded from saved-Proof search. Encrypted full
 backups include pending media and saved draft notes; legacy saved-only exports do not.
 Ordinary file/folder selection is a one-time import. The separate folder source
 uses a read-only directory handle and explicit Start for bounded checks while
-the gallery is open and visible. Its handle stays in memory; Pause/Disconnect
-cancel work, and reload ends the connection. No subfolders are read. Incoming
-media still passes the existing pending-only validator. Full scope, limits,
+the gallery is open and visible. By default its handle stays in memory and new
+media stays pending. An explicit confirmation can remember one trusted folder
+and allow new validated media to save directly, with an approval receipt and
+owner-chosen category/tags. The exact handle, grant/revision, paused state and
+processed hashes stay in this profile's unencrypted IndexedDB, never backups.
+Reopening resumes only an active grant with existing read permission; no startup
+permission prompts. Persistent Pause and Forget cancel work. Each auto-save
+rechecks current consent atomically; another tab cannot continue using revoked
+consent. No subfolders are read. Full scope, limits,
 permission semantics, and cancellation are in [automatic sources](AUTOMATIC_SOURCES.md).
 No account connector, OCR, face recognition, or AI image analysis runs.
 
@@ -203,7 +210,8 @@ gallery is open. It does not collect after the browser closes or automatically
 surface evidence during distress. The review inbox does not grant connector or library
 access. The optional native companion has its own bounded Photos source and
 active-session observer, not general account mining. Any further collector must
-preserve that review boundary and add explicit source permissions, revocation,
+preserve the distinction between review and explicitly trusted-source saves,
+and add explicit source permissions, revocation,
 and protected credential handling.
 
 ## Decorative visual boundary

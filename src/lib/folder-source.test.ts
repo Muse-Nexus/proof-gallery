@@ -65,6 +65,31 @@ describe("explicit, foreground folder intake", () => {
     expect(source.requestPermission).not.toHaveBeenCalled();
   });
 
+  it("restoring a confirmed source queries permission without requesting it", async () => {
+    const { source, watch, stage } = setup();
+    source.queryPermission.mockResolvedValue("prompt");
+    await watch.restore();
+    expect(watch.snapshot().status).toBe("error");
+    expect(source.requestPermission).not.toHaveBeenCalled();
+    expect(source.values).not.toHaveBeenCalled();
+    expect(stage).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(FOLDER_CHECK_INTERVAL_MS * 2);
+    expect(source.queryPermission).toHaveBeenCalledOnce();
+    await watch.start();
+    expect(source.requestPermission).toHaveBeenCalledOnce();
+    expect(stage).toHaveBeenCalledOnce();
+  });
+
+  it("reports automatic saved counts distinctly when supplied a trusted-grant staging path", async () => {
+    const stage = vi.fn<typeof stageLocalProofMedia>().mockResolvedValue({ added: 2, duplicates: 1, rejected: [] });
+    const changed = vi.fn();
+    const watch = new FolderSourceWatch(folder(), changed, stage, "saved");
+    watches.push(watch);
+    await watch.restore();
+    expect(watch.snapshot()).toMatchObject({ added: 2, destination: "saved", status: "watching" });
+    expect(watch.snapshot().message).toBe("2 new items were saved automatically from your trusted folder.");
+  });
+
   it("counts directories and unsupported entries toward the bounded top-level scan", async () => {
     const inaccessible = entry("never-read.png");
     const dirs = Array.from({ length: FOLDER_ENTRY_LIMIT }, (_, i) => ({ kind: "directory" as const, name: `subfolder-${i}`, getFile: vi.fn() }));

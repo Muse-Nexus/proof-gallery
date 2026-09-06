@@ -1822,3 +1822,13 @@ summary:focus-visible { outline: 3px solid #647e6a; outline-offset: 3px; border-
     transition: none !important;
   }
 }
+.folder-source-consent { margin: 1rem 0; padding: 1rem; border: 1px solid #a4b4a8; border-radius: 14px; background: #f7faf5; min-width: 0; }
+.folder-source-consent legend { padding: 0 .35rem; font-weight: 500; }
+.folder-source-consent-grid { display: grid; gap: .8rem; margin: .8rem 0; }
+.folder-source-consent-grid label { display: grid; gap: .35rem; }
+.folder-source-consent-grid input, .folder-source-consent-grid select { width: 100%; min-width: 0; }
+.folder-source-consent-check { display: flex; align-items: flex-start; gap: .6rem; line-height: 1.5; }
+.folder-source-consent-check input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; min-height: 0; margin: .2rem 0 0; accent-color: var(--accent); }
+.folder-source-mode { font-size: .85rem; line-height: 1.5; color: #365444; }
+.automatic-proof-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; margin: 1rem 0; padding: .8rem 1rem; border: 1px solid #c3d1c7; border-radius: 12px; background: #f4f8f2; }
+.automatic-proof-notice p { margin: 0; }

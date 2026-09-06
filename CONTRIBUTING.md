@@ -34,9 +34,13 @@ Do not attach a real backup to an issue or pull request. Default full backups ar
 encrypted; older JSON backups and companion review files are plaintext. All can
 contain original image bytes and EXIF metadata. Use synthetic fixtures only.
 
-Folder-source changes must verify denied permissions, no reads before Start,
-bounded top-level access, cancellation through pending writes, suspension,
-capacity retry, and unchanged-file suppression. See docs/AUTOMATIC_SOURCES.md.
+Folder-source changes must verify denied permissions, no reads before Start or
+explicit confirmed source approval, bounded top-level access, cancellation through
+pending/auto-save writes, suspension, capacity retry, and unchanged-file suppression.
+Only an exact trusted-folder grant permits direct saves; transaction-time revision
+checks, persistent pause/revocation, deleted-file suppression, and backup exclusion
+are required. Source approval is not permission to infer meaning or auto-promote
+pending review. See docs/AUTOMATIC_SOURCES.md.
 
 ## Synthetic fixture style
 

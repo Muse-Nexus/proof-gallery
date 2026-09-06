@@ -21,8 +21,9 @@ and where it came from. Find it again when your own history feels hard to reach.
 1. **Start in this browser.** No account or paid API key needed.
 2. **Bring something real.** Add a message or note, choose photos and clips,
    or connect a dedicated folder for automatic checks while the gallery is open.
-3. **Review what arrives.** Add a few words if you want, choose a category,
-   and keep the items that belong. Automatic intake goes to review first.
+3. **Choose your approval style.** Review incoming items, or explicitly confirm
+   automatic saving for a trusted folder. Choose its category and tags once;
+   new validated media can then save without approving each item.
 4. **Find it when you want it.** Search saved evidence, filter by category or
    tag, or read selected moments together with their original words and sources.
 5. **Back up.** Download an encrypted archive of saved items and pending review.
@@ -32,9 +33,15 @@ and where it came from. Find it again when your own history feels hard to reach.
 
 Choose a small folder for screenshots or exported media and start its source.
 While the gallery is open and visible, it checks about once a minute and stages
-new supported files in review. Pause, resume, check now, and disconnect are
-available. Closing or reloading the page ends the connection. Original files
-are never changed.
+new supported files in review by default. You may confirm automatic saving for
+that exact folder: its handle and approval are remembered in this browser,
+and new media is saved with a clear source-consent receipt. The app does not
+interpret images or invent missing dates, quotes, or people.
+
+Pause, resume, check now, and forget are available. A trusted source can resume
+when you reopen the gallery if its approval and browser read permission remain
+active; a paused source stays paused. Ordinary review connections end on reload.
+Nothing runs with the browser closed. Original files are never changed.
 
 The browser asks for read access where folder permission is supported. Other
 browsers keep the ordinary media picker. Only immediate files are checked;

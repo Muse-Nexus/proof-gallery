@@ -48,6 +48,8 @@ it("cancels a decrypted restore without importing or leaving the panel busy", as
   await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false));
   expect(decryptProofBackup).toHaveBeenCalledWith(archive, "synthetic long password");
   expect(confirm).toHaveBeenCalledOnce();
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Backups do not reconnect or enable trusted sources."));
+  expect(screen.getByText(/Folder permissions and trusted-source connections are not included/)).toBeInTheDocument();
   expect(importLocalProofBackup).not.toHaveBeenCalled();
   expect(requestLocalProofPersistence).not.toHaveBeenCalled();
   expect(onRestored).not.toHaveBeenCalled();

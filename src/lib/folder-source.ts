@@ -7,7 +7,7 @@ export const FOLDER_BYTE_LIMIT = 48 * 1024 * 1024;
 const SESSION_FILE_LIMIT = 2_000;
 const MEDIA_EXTENSION = /\.(jpe?g|png|webp|gif|mp4|webm)$/i;
 
-/** Only the read-only subset is exposed. Handles live in memory for this connection. */
+/** Only the read-only subset is exposed. Persisting a handle needs explicit source consent. */
 export type FolderEntry = {
   kind: "file" | "directory";
   name: string;
@@ -39,6 +39,7 @@ export type FolderSourceState = {
   status: "ready" | "checking" | "watching" | "paused" | "suspended" | "hidden" | "error" | "disconnected";
   folderName: string;
   added: number;
+  destination: "review" | "saved";
   duplicates: number;
   rejected: number;
   lastChecked: number | null;
@@ -48,7 +49,8 @@ export type FolderSourceState = {
 type StageMedia = typeof stageLocalProofMedia;
 
 /**
- * A foreground-only watch, never an approval path. Explicit pause remains a pause
+ * A foreground-only watch. Trusted saving must supply a grant-guarded stage
+ * function; the default is always pending review. Explicit pause remains a pause
  * across editor/visibility changes. Each asynchronous step uses one cancellation
  * signal, including the eventual IndexedDB commit.
  */
@@ -66,9 +68,9 @@ export class FolderSourceWatch {
   private state: FolderSourceState;
 
   constructor(folder: ProofFolder, private readonly onChange: (state: FolderSourceState) => void,
-    private readonly stage: StageMedia = stageLocalProofMedia) {
+    private readonly stage: StageMedia = stageLocalProofMedia, destination: "review" | "saved" = "review") {
     this.folder = folder;
-    this.state = { status: "ready", folderName: folder.name, added: 0, duplicates: 0,
+    this.state = { status: "ready", folderName: folder.name, added: 0, destination, duplicates: 0,
       rejected: 0, lastChecked: null, limited: false, message: "Folder selected. Start when you’re ready." };
   }
 
@@ -79,6 +81,13 @@ export class FolderSourceWatch {
     if (!this.folder || this.wanted) return;
     this.wanted = true;
     await this.check(true);
+  }
+
+  /** Restore an already-confirmed active source without opening a permission prompt. */
+  async restore(): Promise<void> {
+    if (!this.folder || this.wanted) return;
+    this.wanted = true;
+    await this.check(false);
   }
 
   pause(): void {
@@ -111,7 +120,7 @@ export class FolderSourceWatch {
     this.cancel();
     this.folder = null;
     this.seen.clear();
-    this.update({ status: "disconnected", folderName: "", message: "Folder disconnected. Items already in review remain there." });
+    this.update({ status: "disconnected", folderName: "", message: "Folder disconnected. Existing saved Proof and review items remain." });
   }
 
   private update(patch: Partial<FolderSourceState>): void {
@@ -178,7 +187,7 @@ export class FolderSourceWatch {
         permission = await folder.requestPermission({ mode: "read" });
         signal.throwIfAborted();
       }
-      if (permission !== "granted") throw new Error("Read permission was not granted. Resume to allow this folder, or disconnect and choose another.");
+      if (permission !== "granted") throw new Error("Read permission is needed. Reconnect to allow this exact folder, or disconnect it.");
       const files: File[] = [];
       const fingerprints: string[] = [];
       let entries = 0;
@@ -230,7 +239,10 @@ export class FolderSourceWatch {
         duplicates: this.state.duplicates + result.duplicates,
         rejected: this.state.rejected + result.rejected.length + oversized,
         lastChecked: Date.now(), limited,
-        message: result.added ? `${result.added} new ${result.added === 1 ? "item is" : "items are"} ready for your review.` : "Up to date. Checking again in about a minute." });
+        message: result.added ? this.state.destination === "saved"
+          ? `${result.added} new ${result.added === 1 ? "item was" : "items were"} saved automatically from your trusted folder.`
+          : `${result.added} new ${result.added === 1 ? "item is" : "items are"} ready for your review.`
+          : "Up to date. Checking again in about a minute." });
       this.timer = setTimeout(() => { this.timer = null; void this.check(false); }, FOLDER_CHECK_INTERVAL_MS);
     } catch (error) {
       if (signal.aborted) return;
