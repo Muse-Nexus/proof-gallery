@@ -1,5 +1,8 @@
 # Mac Photos companion
 
+The web Sources card labels this companion as prerelease until a public
+notarized installer is available. Browser media selection needs no companion.
+
 The companion makes source discovery less manual without treating every photo
 as Proof. It is a source adapter, not a judge of identity, relationships, worth,
 or emotional meaning. Optional on-device text recognition can expose words

@@ -670,7 +670,7 @@ function Gallery({
             <h3 id="mac-source-title">Apple Photos</h3>
             <p>Use the companion to select a Photos album or date range. Transfer a prepared batch into your review.</p>
             <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => setShowCompanion(value => !value)}>{showCompanion ? "Close Mac connection" : "Connect this Mac"}</button>
-            <small>{companion ? "A temporary companion connection is active." : "Requires the separately installed Mac companion."}</small>
+            <small>{companion ? "A temporary companion connection is active." : "Companion prerelease: a public notarized installer is not available yet. Choose media above to begin without it."}</small>
           </section>
         </div>
         {showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setView("gallery"); setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); void reload(); }} />}
