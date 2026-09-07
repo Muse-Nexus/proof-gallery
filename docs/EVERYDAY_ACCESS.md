@@ -9,7 +9,7 @@ commit, not this document's presence on a development branch.
 
 - Add Proof begins with an exact message or short note. Optional visible word
   cues help organize it; manually edited fields remain the owner's choice.
-  Category and tag suggestions skip sentences containing the existing negation cues; literal notes and explicitly chosen tags remain unchanged.
+  Category and tag suggestions treat line breaks as spaces before skipping sentences containing the existing negation cues; literal notes and explicitly chosen tags remain unchanged.
 - A focused paste/drop area accepts literal text or one validated attachment.
   It does not read the clipboard in the background or download pasted links.
 - Date, source, tags, person, and project are under an expandable details area.

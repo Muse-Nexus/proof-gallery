@@ -445,11 +445,15 @@ describe("note-first capture", () => {
     expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
   });
 
-  it("does not save automatic tags stripped of their negation", async () => {
-    const quote = "I never finished that drawing.";
+  it.each([
+    "I never finished that drawing.",
+    "I was not\ninvited.",
+    "I never\r\nfinished the project.",
+  ])("does not save automatic category or tags stripped of their negation: %j", async quote => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     renderEditor({ onSave });
-    fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), { target: { value: quote } });
+    fireEvent.paste(screen.getByRole("group", { name: "Paste or drop evidence" }), { clipboardData: captured(quote) });
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
     expect(screen.getByLabelText(/^Tags$/)).toHaveValue("");
     expect(screen.queryByText(/^Suggested tags:/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "creativity" } });
@@ -459,7 +463,7 @@ describe("note-first capture", () => {
   });
 
   it("preserves explicit manual tags and the full quote when a note becomes negated", async () => {
-    const quote = "I didn’t finish that drawing.\nThose are my exact words.";
+    const quote = "I didn’t\nfinish that drawing.\nThose are my exact words.";
     const onSave = vi.fn().mockResolvedValue(undefined);
     renderEditor({ onSave });
     const note = screen.getByLabelText(/Exact quote or evidence/i);

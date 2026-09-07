@@ -24,8 +24,8 @@ export function suggestNoteOrganization(note: string): {
   title: string; category: ProofCategory | null; cue: string | null; tags: string[];
 } {
   // Use the same conservative sentence boundary for category and tag cues.
-  // Dropping only the negation token would turn "never finished" into "finished".
-  const sentences = note.toLowerCase().replace(/[’]/g, "'").split(/[.!?\n]+/)
+  // Line wrapping must not detach "not" or "never" from the following cue.
+  const sentences = note.toLowerCase().replace(/[’]/g, "'").replace(/[\r\n]+/g, " ").split(/[.!?]+/)
     .filter(sentence => !NEGATION.test(sentence));
   const matches = CATEGORY_CUES.flatMap(([category, cues]) => {
     const cue = cues.find(cue => sentences.some(sentence =>
