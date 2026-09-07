@@ -47,7 +47,7 @@ import CompanionCore
     @objc private func pauseCollection() { model.pause() }
     @objc private func quitCompanion() { NSApp.terminate(nil) }
     private func suspendForegroundCollection() {
-        if model.allowICloudDownloads || !model.backgroundEnabled { model.pause() }
+        model.suspendForHiddenWindow()
     }
     func applicationWillHide(_ notification: Notification) { suspendForegroundCollection() }
     func windowDidMiniaturize(_ notification: Notification) { suspendForegroundCollection() }
@@ -57,7 +57,7 @@ import CompanionCore
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if model.backgroundEnabled || storage.keepsServicesRunningAfterWindowClose {
             // iCloud is only a visible, separately authorized one-shot batch.
-            if model.allowICloudDownloads || !model.backgroundEnabled { model.pause() }
+            model.suspendForHiddenWindow()
             sender.orderOut(nil); return false
         }
         // Route closing through the same unsaved-export guard as Cmd-Q.

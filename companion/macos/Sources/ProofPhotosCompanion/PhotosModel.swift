@@ -350,6 +350,9 @@ private final class ResourceRead: @unchecked Sendable {
         connected = false; photos = []; contexts = [:]; seen = []; lastScopeKey = nil
         message = "Collection stopped for native storage clearing."
     }
+    func suspendForHiddenWindow() {
+        if allowICloudDownloads || !backgroundEnabled { pause() }
+    }
 
     func stopBridge() {
         bridgeGeneration = UUID(); pairingCode = ""; bridge.stop()
