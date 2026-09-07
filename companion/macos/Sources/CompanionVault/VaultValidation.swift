@@ -31,6 +31,7 @@ enum VaultValidation {
     }
     static func input(_ input: VaultInput, saved: Bool) throws {
         try fields(input.fields, saved: saved)
+        try json(.object(input.provenance))
         guard try JSONEncoder().encode(input.provenance).count <= 32 * 1024 else { throw VaultError.invalid }
         guard input.media != nil || !input.fields.evidenceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw VaultError.invalid }
         if let media = input.media {
@@ -50,6 +51,20 @@ enum VaultValidation {
                 guard f.date(from: date) != nil || ISO8601DateFormatter().date(from: date) != nil else { throw VaultError.invalid }
             }
             if let zone = receipt.timeZone { guard TimeZone(identifier: zone) != nil else { throw VaultError.invalid } }
+        }
+    }
+    private static func json(_ value: VaultJSON, depth: Int = 0) throws {
+        guard depth <= 16 else { throw VaultError.invalid }
+        switch value {
+        case .object(let object):
+            guard object.count <= 1000 else { throw VaultError.invalid }
+            for (key, v) in object { try text(key, max: 1024); try json(v, depth: depth + 1) }
+        case .array(let array):
+            guard array.count <= 1000 else { throw VaultError.invalid }
+            for v in array { try json(v, depth: depth + 1) }
+        case .string(let string): try text(string, max: 32 * 1024)
+        case .number(let number): guard number.isFinite else { throw VaultError.invalid }
+        case .null, .bool: break
         }
     }
     static func signature(_ data: Data, mime: String) -> Bool {

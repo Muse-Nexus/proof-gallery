@@ -114,6 +114,21 @@ public struct VaultRecord: Codable, Equatable, Sendable {
     public let approval: VaultApproval?
     public let createdAt: String
     public let updatedAt: String
+    public var restoreReceipt: VaultRestoreReceipt? = nil
+}
+public struct VaultRestoreReceipt: Codable, Equatable, Sendable {
+    public let originalCollectionID: String
+    public let sourceCollectionID: String
+    public let restoredAt: String
+}
+public struct VaultRestoreResult: Codable, Equatable, Sendable {
+    public let saved: Int
+    public let pending: Int
+}
+public enum VaultBackupError: Error { case invalidArchive, passphrase, restoreRequiresEmptyVault }
+public enum VaultBackupLimits {
+    public static let maximumPlaintextBytes = 192 * 1024 * 1024
+    public static let maximumArchiveBytes = maximumPlaintextBytes + 57
 }
 
 /// Adapter-owned bounded selection/bookmark payload. Never exported to gallery/MCP.

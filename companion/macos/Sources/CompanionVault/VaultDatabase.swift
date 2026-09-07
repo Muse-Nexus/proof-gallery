@@ -49,6 +49,13 @@ final class VaultDatabase {
             guard sqlite3_open_v2(directory.appendingPathComponent("vault.sqlite").path, &db,
                                   SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else { throw VaultError.storage }
             sqlite3_busy_timeout(db, 1000)
+            let tables = try rows("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                .compactMap { row in row.first.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) } }
+            if !tables.isEmpty {
+                guard Set(tables) == Set(["metadata", "records", "sources", "handled", "tombstones", "clients", "reminder", "deliveries"]),
+                      let version = try rows("SELECT value FROM metadata WHERE key='version'").first?.first ?? nil,
+                      String(data: version, encoding: .utf8) == "1" else { throw VaultError.unavailable }
+            }
             try run("PRAGMA foreign_keys=ON"); try run("PRAGMA trusted_schema=OFF")
             try run("PRAGMA journal_mode=DELETE"); try run("PRAGMA synchronous=FULL"); try run("PRAGMA secure_delete=ON")
             try run("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")

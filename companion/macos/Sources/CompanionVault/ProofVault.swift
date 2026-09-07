@@ -141,6 +141,8 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
                 guard !isCancelled() else { throw VaultError.unavailable }
                 guard let media = input.media, let receipt = input.receipt,
                       receipt.provider == grant.configuration.provider, receipt.sourceID == grant.configuration.sourceID else { throw VaultError.forbidden }
+                // Import/add time and names are not source occurrence metadata.
+                if receipt.captureDate == nil, input.fields.occurredOn != nil { throw VaultError.invalid }
                 let hashes = Set([media.sha256, receipt.originalSha256])
                 var handled = false
                 for hash in hashes { if try hasHandled(sourceGrantID: sourceGrantID, sha256: hash) { handled = true } }
@@ -184,7 +186,7 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
     private func changed(_ current: VaultRecord, fields: VaultFields, state: VaultState, approval: VaultApproval?) -> VaultRecord {
         VaultRecord(id: current.id, collectionID: collectionID, revision: UUID().uuidString, state: state, fields: fields,
             media: current.media, receipt: current.receipt, provenance: current.provenance, approval: approval,
-            createdAt: current.createdAt, updatedAt: isoTimestamp(clock()))
+            createdAt: current.createdAt, updatedAt: isoTimestamp(clock()), restoreReceipt: current.restoreReceipt)
     }
     public func edit(id: String, revision: String, fields: VaultFields) throws -> VaultRecord {
         try transaction {
@@ -374,6 +376,50 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
             guard age >= 0, age <= ReminderPolicy.snapshotMaximumAge,
                   floor(now.timeIntervalSince1970 / 60) == floor(claimedAt.timeIntervalSince1970 / 60) else { return false }
             return try !db.rows("SELECT id FROM records WHERE state='saved' LIMIT 1").isEmpty
+        }
+    }
+
+    /// Owner-triggered content snapshot, encrypted in memory; no files or grants exported.
+    public func exportEncryptedBackup(passphrase: String) throws -> Data {
+        var plaintext = try serialized {
+            let records = try decode(VaultRecord.self, db.rows("SELECT record FROM records ORDER BY id"))
+            let entries = try records.map { item in
+                VaultBackupEntry(record: item, media: item.media == nil ? nil : try media(id: item.id, revision: item.revision))
+            }
+            let content = VaultContentBackup(format: VaultBackup.format, version: 1, exportedAt: isoTimestamp(clock()),
+                sourceCollectionID: collectionID, entries: entries)
+            try VaultBackup.validate(content)
+            let data = try encoder.encode(content)
+            guard data.count <= VaultBackup.maximumBytes else { throw VaultBackupError.invalidArchive }
+            return data
+        }
+        defer { plaintext.resetBytes(in: 0..<plaintext.count) }
+        return try VaultBackup.encrypt(plaintext, passphrase: passphrase)
+    }
+    /// Explicit owner restore, never a source ingestion route or browser silent migration.
+    /// Historical approval is data, not a recreated source or client permission.
+    public func restoreEncryptedBackup(_ archive: Data, passphrase: String) throws -> VaultRestoreResult {
+        var plaintext = try VaultBackup.decrypt(archive, passphrase: passphrase)
+        defer { plaintext.resetBytes(in: 0..<plaintext.count) }
+        let content = try VaultBackup.decode(plaintext)
+        return try transaction {
+            for table in ["records", "sources", "clients", "reminder"] {
+                // Table identifiers are a fixed in-code allowlist, never caller input.
+                guard try db.rows("SELECT 1 FROM \(table) LIMIT 1").isEmpty else { throw VaultBackupError.restoreRequiresEmptyVault }
+            }
+            var saved = 0, pending = 0
+            for entry in content.entries {
+                let r = entry.record
+                let restored = VaultRecord(id: r.id, collectionID: collectionID, revision: UUID().uuidString,
+                    state: r.state, fields: r.fields, media: r.media, receipt: r.receipt, provenance: r.provenance,
+                    approval: r.approval, createdAt: r.createdAt, updatedAt: r.updatedAt,
+                    restoreReceipt: VaultRestoreReceipt(originalCollectionID: r.restoreReceipt?.originalCollectionID ?? r.collectionID,
+                        sourceCollectionID: content.sourceCollectionID, restoredAt: isoTimestamp(clock())))
+                try put(restored, bytes: entry.media?.bytes, insert: true)
+                if r.state == .saved { saved += 1 } else { pending += 1 }
+            }
+            try capacity()
+            return VaultRestoreResult(saved: saved, pending: pending)
         }
     }
 }

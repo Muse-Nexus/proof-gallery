@@ -109,6 +109,12 @@ final class ProofVaultTests: XCTestCase {
         XCTAssertThrowsError(try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: [input(provider: .photos)]))
         bad = input(); bad.fields.occurredOn = "2026-02-30"
         XCTAssertThrowsError(try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: [bad]))
+        bad.fields.occurredOn = "2026-02-28" // Valid date still cannot replace missing source capture metadata.
+        XCTAssertThrowsError(try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: [bad]))
+        var deep = VaultJSON.string("synthetic")
+        for _ in 0..<17 { deep = .array([deep]) }
+        bad = input(); bad.provenance = ["deep": deep]
+        XCTAssertThrowsError(try v.stageManual(bad))
         _ = try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: (0..<50).map { input(UInt8($0)) })
         _ = try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: (50..<100).map { input(UInt8($0)) })
         XCTAssertThrowsError(try v.ingest(sourceGrantID: s.id, revision: s.revision, inputs: [input(100)]))
