@@ -5,15 +5,19 @@ import CompanionVault
 final class ProofMCPProcessTests: XCTestCase {
     private struct RunResult { let stdout: Data; let stderr: Data; let status: Int32 }
     private var executable: URL {
-        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent(".build/debug/ProofMCP")
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return root.appendingPathComponent(ProcessInfo.processInfo.environment["PROOF_TEST_PACKAGED_HELPER"] == "1"
+            ? ".build/Proof Photos Companion.app/Contents/Helpers/ProofMCP" : ".build/debug/ProofMCP")
     }
     private func run(_ messages: [[String: Any]], port: UInt16, token: String) async throws -> RunResult {
         let bytes = try messages.reduce(into: Data()) { result, message in
             result.append(try JSONSerialization.data(withJSONObject: message)); result.append(10)
         }
         let executable = executable
-        guard FileManager.default.isExecutableFile(atPath: executable.path) else { throw XCTSkip("Build the real ProofMCP product before process tests") }
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else {
+            if ProcessInfo.processInfo.environment["PROOF_TEST_PACKAGED_HELPER"] == "1" { throw CocoaError(.fileNoSuchFile) }
+            throw XCTSkip("Build the real ProofMCP product before process tests")
+        }
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process(), input = Pipe(), output = Pipe(), errors = Pipe()
@@ -64,6 +68,13 @@ final class ProofMCPProcessTests: XCTestCase {
         XCTAssertEqual(result.status, 0); XCTAssertTrue(result.stderr.isEmpty)
         let rows = try responses(result)
         XCTAssertEqual(rows.count, 5)
+        guard rows.count == 5 else {
+            let detail = String(decoding: result.stderr.prefix(4000), as: UTF8.self)
+                .replacingOccurrences(of: grant.token, with: "REDACTED")
+                .replacingOccurrences(of: fixture.root.path, with: "SYNTHETIC-VAULT")
+            XCTFail("Helper exited \(result.status) with \(rows.count) responses. \(detail)")
+            throw CocoaError(.executableRuntimeMismatch)
+        }
         let initialize = try XCTUnwrap(rows[0]["result"] as? [String: Any])
         XCTAssertEqual(initialize["protocolVersion"] as? String, "2025-11-25")
         let listed = try XCTUnwrap(rows[1]["result"] as? [String: Any])
@@ -97,6 +108,7 @@ final class ProofMCPProcessTests: XCTestCase {
         let revokedRows = try responses(revokedResult)
         XCTAssertEqual((revokedRows.last?["result"] as? [String: Any])?["isError"] as? Bool, true)
         for result in [pendingResult, revokedResult] {
+            XCTAssertEqual(result.status, 0); XCTAssertTrue(result.stderr.isEmpty)
             let output = String(decoding: result.stdout + result.stderr, as: UTF8.self)
             XCTAssertFalse(output.contains(pending.fields.evidenceText))
             XCTAssertFalse(output.contains(grant.token)); XCTAssertFalse(output.contains(fixture.root.path))

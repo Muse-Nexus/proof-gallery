@@ -6,12 +6,16 @@ trap 'rm -rf "$companion_fixture"' EXIT
 companion_fixture_app="$companion_fixture/macos"
 companion_fixture_bin="$companion_fixture/bin"
 mkdir -p "$companion_fixture_app" "$companion_fixture_bin"
-cp "$(dirname "$0")/build-app.sh" "$(dirname "$0")/Info.plist" "$(dirname "$0")/ProofPhotosCompanion.entitlements" "$(dirname "$0")/ProofMCP.entitlements" "$companion_fixture_app/"
+cp "$(dirname "$0")/build-app.sh" "$(dirname "$0")/Info.plist" "$(dirname "$0")/ProofMCP-Info.plist" "$(dirname "$0")/ProofPhotosCompanion.entitlements" "$(dirname "$0")/ProofMCP.entitlements" "$companion_fixture_app/"
 cat > "$companion_fixture_bin/swift" <<'STUB'
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' build >> "$PROOF_TEST_ROOT/swift.log"
 if [[ " $* " == *" --show-bin-path "* ]]; then printf '%s\n' "$PROOF_TEST_ROOT/products"; exit 0; fi
+if [[ " $* " == *" --product ProofMCP "* ]]; then
+  [[ " $* " == *" -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "* ]]
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ProofMCP-Info.plist)" == nexus.muse.proof.mcp ]]
+fi
 mkdir -p "$PROOF_TEST_ROOT/products"
 printf '#!/bin/bash\nexit 0\n' > "$PROOF_TEST_ROOT/products/ProofPhotosCompanion"
 chmod +x "$PROOF_TEST_ROOT/products/ProofPhotosCompanion"

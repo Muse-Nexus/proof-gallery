@@ -12,8 +12,12 @@ companion_build_args=(-c release)
 if [[ -n "${PROOF_BUILD_TRIPLE:-}" ]]; then
   companion_build_args+=(--triple "$PROOF_BUILD_TRIPLE")
 fi
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ProofMCP-Info.plist)" == nexus.muse.proof.mcp ]] || { printf '%s\n' 'Assistant helper bundle identity does not match.' >&2; exit 1; }
 swift build "${companion_build_args[@]}" --product ProofPhotosCompanion
-swift build "${companion_build_args[@]}" --product ProofMCP
+# This independently sandboxed command-line tool needs its own bundle identity.
+# It is launched by the selected assistant, never by inheriting the Photos app.
+swift build "${companion_build_args[@]}" --product ProofMCP \
+  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$PWD/ProofMCP-Info.plist"
 companion_bin_dir="$(swift build "${companion_build_args[@]}" --show-bin-path)"
 [[ -x "$companion_bin_dir/ProofPhotosCompanion" && -x "$companion_bin_dir/ProofMCP" ]] || { printf '%s\n' 'Both native executables must be built before packaging.' >&2; exit 1; }
 companion_app_archs="$(lipo "$companion_bin_dir/ProofPhotosCompanion" -archs)"

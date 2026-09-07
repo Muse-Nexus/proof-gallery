@@ -1,5 +1,12 @@
 # Synthetic native bridge and MCP receipt
 
+The same process suite can target the task-built, sandboxed helper with
+`PROOF_TEST_PACKAGED_HELPER=1 swift test --package-path companion/macos --filter
+ProofMCPProcessTests`. This explicit mode fails if the bundle is absent; it does
+not search installed apps or accept an arbitrary executable path. The default
+mode continues to test the debug helper. Neither mode activates Photos or uses
+real evidence. Ad-hoc execution is not a Developer ID/notarization receipt.
+
 Reviewed lead transport commit `5f86d3b` with vault through `11ef2b5` and
 the `ProofMCP` executable target from `aeed0ec`. Tests use a newly created,
 owner-private directory under `/private/tmp`, a synthetic SQLite vault, fresh

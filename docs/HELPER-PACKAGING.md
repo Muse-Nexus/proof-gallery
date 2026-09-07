@@ -11,6 +11,12 @@ It does not inherit the root app's Photos, selected-file, bookmark or server
 permissions. Its code pins requests to the configured IPv4 loopback bridge; the
 network-client entitlement itself is not a loopback-only firewall.
 
+The release helper embeds its own `ProofMCP-Info.plist` in Mach-O
+`__TEXT,__info_plist`, matching its signing identifier. This is the command-line
+equivalent of Xcode's [Create Info.plist Section in Binary](https://developer.apple.com/documentation/xcode/build-settings-reference)
+setting. It establishes an independent sandbox identity; do not substitute
+`com.apple.security.inherit` or remove the sandbox to make startup succeed.
+
 Both signatures are verified. The signed helper entitlement dictionary must
 contain exactly those two enabled keys, including for an ad-hoc build. A Developer
 ID build additionally checks each executable's exact approved identity, expected
@@ -33,5 +39,20 @@ helper-before-app signing order and the ad-hoc notice. It uses the real property
 list parser only on synthetic entitlement files. `test-release-safety.sh` includes
 this suite after its existing synthetic notarization-gate tests.
 
-No actual signing, notarization submission, installation, helper launch or OS
-permission request was performed to produce this packaging test receipt.
+Those stub checks do not perform real signing, helper launch or OS requests.
+
+## Local packaged-process receipt (2026-09-07)
+
+An ad-hoc arm64 development bundle was separately built and its two signatures
+and exact helper entitlements verified. The first packaged-process probe trapped
+inside sandbox initialization before main. Embedding the helper's own identity
+fixed that startup boundary without changing entitlements. Running
+`PROOF_TEST_PACKAGED_HELPER=1 swift test --package-path companion/macos --filter ProofMCPProcessTests`
+then passed both actual-process tests: initialization/read-only tool list, exact
+saved evidence across the real loopback bridge, rejection of mutation tools,
+pending exclusion and revoked access. All records/tokens were synthetic.
+
+This is a local ad-hoc process receipt, not Developer ID signing, notarization,
+installation, clean-device acceptance or proof of every assistant host's launch
+policy. An assistant that imposes its own incompatible child-process sandbox may
+require a different supported integration; do not disable either sandbox.
