@@ -52,16 +52,16 @@ import CompanionCore
         NSApp.terminate(nil); return false
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        model.pause()
         if !model.photos.isEmpty && !model.exported {
             let alert = NSAlert(); alert.messageText = "Quit without exporting these photos?"
             alert.informativeText = "Prepared photos are only in memory. Originals remain in Photos, but this unexported review batch will be discarded."
             alert.addButton(withTitle: "Keep open"); alert.addButton(withTitle: "Quit and discard")
             if alert.runModal() != .alertSecondButtonReturn { return .terminateCancel }
         }
+        model.stopForTermination()
         return .terminateNow
     }
-    func applicationWillTerminate(_ notification: Notification) { model.pause() }
+    func applicationWillTerminate(_ notification: Notification) { model.stopForTermination() }
 }
 
 struct CompanionView: View {

@@ -298,7 +298,9 @@ private final class ResourceRead: @unchecked Sendable {
         }
     }
 
-    func pause() {
+    /// Process shutdown cancels current work but does not rewrite saved consent.
+    /// An explicitly paused source remains paused because no grant is changed.
+    func stopForTermination() {
         stopBridge()
         if observing { PHPhotoLibrary.shared().unregisterChangeObserver(self); observing = false }
         active = false; generation += 1; scanAgain = false
@@ -306,6 +308,10 @@ private final class ResourceRead: @unchecked Sendable {
         activeRead?.cancel(); activeRead = nil; task?.cancel(); task = nil; scanning = false
         activeTextRead?.cancel(); activeTextRead = nil
         allowICloudDownloads = false
+    }
+
+    func pause() {
+        stopForTermination()
         if let vault, let grant = sourceGrant {
             do { sourceGrant = try vault.pauseSource(id: grant.id, revision: grant.revision) }
             catch { message = "Collection stopped. Durable pause could not be confirmed; reconnect before restarting."; return }

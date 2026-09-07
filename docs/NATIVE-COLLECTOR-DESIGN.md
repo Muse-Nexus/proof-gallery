@@ -107,8 +107,10 @@ Foreground Photos preparation still produces the unchanged export batch.
 Background Photos preparation omits OCR and the ephemeral thumbnail batch;
 new media goes to the vault's pending queue. The native UI defaults to review mode. Trusted-folder approval displays the exact
 resolved folder path, owner-chosen category and tags in a separate confirmation;
-it persists a paused trusted grant and never promotes existing pending items. Quit pauses
-persistently; closing the window keeps the process running only under the source's
+it persists a paused trusted grant and never promotes existing pending items. Quit
+stops in-process work without rewriting source consent; an active background
+source can resume at the next launch, while explicit Pause remains persisted.
+Closing the window keeps the process running only under the source's
 background choice. Login registration remains a separate native action.
 
 Focused synthetic tests cover byte/receipt fidelity, folder top-level isolation,
