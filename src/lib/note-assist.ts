@@ -23,9 +23,12 @@ export function noteWords(text: string): string[] {
 export function suggestNoteOrganization(note: string): {
   title: string; category: ProofCategory | null; cue: string | null; tags: string[];
 } {
-  const sentences = note.toLowerCase().replace(/[’]/g, "'").split(/[.!?\n]+/);
+  // Use the same conservative sentence boundary for category and tag cues.
+  // Dropping only the negation token would turn "never finished" into "finished".
+  const sentences = note.toLowerCase().replace(/[’]/g, "'").split(/[.!?\n]+/)
+    .filter(sentence => !NEGATION.test(sentence));
   const matches = CATEGORY_CUES.flatMap(([category, cues]) => {
-    const cue = cues.find(cue => sentences.some(sentence => !NEGATION.test(sentence) &&
+    const cue = cues.find(cue => sentences.some(sentence =>
       ` ${sentence.replace(/[^\p{L}' ]/gu, " ").replace(/\s+/g, " ")} `.includes(` ${cue} `)));
     return cue ? [{ category, cue }] : [];
   });
@@ -35,7 +38,7 @@ export function suggestNoteOrganization(note: string): {
   return {
     title: title.length > 100 ? `${title.slice(0, 99)}…` : title,
     category: match?.category ?? null, cue: match?.cue ?? null,
-    tags: normalizeTags(noteWords(note).slice(0, 6)),
+    tags: normalizeTags(noteWords(sentences.join(" ")).slice(0, 6)),
   };
 }
 

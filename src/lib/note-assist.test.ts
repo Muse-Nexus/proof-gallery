@@ -28,6 +28,29 @@ describe("local note organization", () => {
     expect(suggestNoteOrganization("word ".repeat(100)).title.length).toBe(100);
     expect(suggestNoteOrganization("maple oak pine birch cedar willow ash elm").tags).toHaveLength(6);
   });
+  it.each([
+    "I never finished that drawing.",
+    "I was not invited.",
+    "No award arrived.",
+    "I cannot finish the painting.",
+    "I haven't finished it.",
+    "They weren’t invited.",
+    "She hasn’t recovered.",
+    "The receipt was unpaid.",
+    "They rejected the song.",
+    "Without family, I finished it.",
+  ])("does not detach suggested tags from a negated sentence: %s", note => {
+    expect(suggestNoteOrganization(note)).toEqual({ title: note, category: null, cue: null, tags: [] });
+  });
+  it.each([". ", "! ", "? ", "\n"])("keeps tags from separate unnegated sentences using %j", separator => {
+    const note = `I never finished that drawing${separator}A river walk.`;
+    expect(suggestNoteOrganization(note).tags).toEqual(["river", "walk"]);
+  });
+  it("keeps literal affirmative tags even when category cues conflict", () => {
+    expect(suggestNoteOrganization("Finished the drawing.")).toMatchObject({
+      category: null, tags: ["finished", "drawing"],
+    });
+  });
 });
 describe("source-bound connections and stories", () => {
   it("matches meaningful words only inside the same owner's saved Proof", () => {

@@ -2,7 +2,7 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { buildProofWorker, PROOF_SHELL_CACHE_PREFIX } from "./pwa-worker";
 
-const assets = ["/index.html", "/offline.html", "/assets/app-a123.js", "/assets/app-b456.css"];
+const assets = ["/", "/offline", "/assets/app-a123.js", "/assets/app-b456.css"];
 function worker({ failInstall = false, offline = false } = {}) {
   type WorkerEvent = { request?: Request; waitUntil: (promise: Promise<unknown>) => void; respondWith: (promise: Promise<Response>) => void };
   const handlers = new Map<string, (event: WorkerEvent) => void>();
@@ -40,6 +40,14 @@ describe("public app-shell worker", () => {
     expect([...fixture.handlers.keys()].sort()).toEqual(["activate", "fetch", "install"]);
     expect(buildProofWorker(assets, "1234567890abcdef")).not.toMatch(/skipWaiting\(|clients\.claim\(|indexedDB|postMessage\(|caches\.match\(/);
   });
+  it("requires clean root/help URLs and rejects redirecting HTML filenames", () => {
+    for (const path of ["/index.html", "/offline.html", "/offline/", "/another.html"]) {
+      expect(() => buildProofWorker([...assets, path], "1234567890abcdef")).toThrow("Invalid public");
+    }
+    for (const required of ["/", "/offline"]) {
+      expect(() => buildProofWorker(assets.filter(path => path !== required), "1234567890abcdef")).toThrow("Invalid public");
+    }
+  });
   it("fails a new install cleanly without touching another cache", async () => {
     const fixture = worker({ failInstall: true });
     await expect(fixture.run("install")).rejects.toThrow("Synthetic install failure");
@@ -68,10 +76,11 @@ describe("public app-shell worker", () => {
     const fixture = worker({ offline: true });
     const root = new Request("https://proof.example/");
     Object.defineProperty(root, "mode", { value: "navigate" });
-    expect(await (await fixture.run("fetch", root))!.text()).toBe("Public /index.html");
+    expect(await (await fixture.run("fetch", root))!.text()).toBe("Public /");
+    expect(await (await fixture.run("fetch", new Request("https://proof.example/offline")))!.text()).toBe("Public /offline");
     const unknown = new Request("https://proof.example/unavailable");
     Object.defineProperty(unknown, "mode", { value: "navigate" });
-    expect(await (await fixture.run("fetch", unknown))!.text()).toBe("Public /offline.html");
+    expect(await (await fixture.run("fetch", unknown))!.text()).toBe("Public /offline");
     expect(fixture.cache.addAll).not.toHaveBeenCalled();
   });
 });

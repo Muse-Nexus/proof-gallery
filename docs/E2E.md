@@ -100,6 +100,9 @@ Clipboard and drop coverage dispatches standard synthetic DOM events through
 the focused intake area. It never reads or replaces the system clipboard and
 does not establish native OS share-sheet support. Component tests separately
 cover validation races, oversized transfers, and cancellation.
+Synthetic strings embedded in browser evaluation also escape HTML delimiters
+and JavaScript line separators; runner assertions check exact round trips for
+quotes, backslashes, control characters, and script-closing text.
 
 The folder picker is replaced only inside the ephemeral test page with a function
 returning a genuine browser-owned Origin Private File System directory handle.

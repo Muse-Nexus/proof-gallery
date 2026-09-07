@@ -17,14 +17,29 @@ const publicPaths = ["/index.html", "/proof-sw.js", "/offline.html", "/manifest.
   ...(await readdir(join(dist, "visuals"))).filter(name => /\.(png|webp|jpg|svg)$/.test(name)).map(name => `/visuals/${name}`),
   ...(await readdir(join(dist, "assets"))).filter(name => /\.(js|css|woff2?)$/.test(name)).map(name => `/assets/${name}`)];
 const files = new Map(await Promise.all(publicPaths.map(async path => [path, await readFile(join(dist, path))])));
+const cleanHtml = new Map([["/index.html", "/"], ["/offline.html", "/offline"]]);
+const htmlFiles = new Map(Array.from(cleanHtml, ([file, url]) => [url, file]));
+const shellPaths = publicPaths.filter(path => path !== "/proof-sw.js" && !path.startsWith("/visuals/"))
+  .map(path => cleanHtml.get(path) ?? path).sort();
 const manifest = JSON.parse(files.get("/manifest.webmanifest").toString());
 assert(!manifest.share_target && !manifest.file_handlers, "This release must not register OS sharing/handlers");
 const policy = (await readFile(join(repository, "public/_headers"), "utf8")).match(/Content-Security-Policy: (.+)/)?.[1];
 let updateVersion = false;
+let serverOffline = false;
 const server = createServer((request, response) => {
-  const path = new URL(request.url, "http://127.0.0.1").pathname;
-  const file = files.get(path === "/" ? "/index.html" : path);
-  if (request.method !== "GET" || !file) { response.writeHead(404); response.end("Synthetic server: not found"); return; }
+  // CDP's page-target offline emulation can leave worker fetches online.
+  // Drop fixture connections too, proving no live server supplies offline HTML.
+  if (serverOffline) { request.socket.destroy(); return; }
+  const url = new URL(request.url, "http://127.0.0.1");
+  const path = url.pathname;
+  if (request.method !== "GET") { response.writeHead(404); response.end("Synthetic server: not found"); return; }
+  // Match Pages' extensionless HTML redirects: old precache URLs must fail with redirect:error.
+  if (cleanHtml.has(path)) {
+    response.writeHead(308, { Location: cleanHtml.get(path) + url.search, "Cache-Control": "no-store" });
+    response.end(); return;
+  }
+  const file = files.get(htmlFiles.get(path) ?? path);
+  if (!file) { response.writeHead(404); response.end("Synthetic server: not found"); return; }
   const mime = path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : path.endsWith(".svg") ? "image/svg+xml" : path.endsWith(".webp") ? "image/webp" : path.endsWith(".png") ? "image/png" : path.endsWith(".jpg") ? "image/jpeg" : path.endsWith(".webmanifest") ? "application/manifest+json" : "text/html";
   response.writeHead(200, { "Content-Type": mime, "Cache-Control": "no-store", "Content-Security-Policy": policy, "Referrer-Policy": "no-referrer" });
   // Synthetic second-version fixture exercises the real worker lifecycle, not application storage.
@@ -82,6 +97,15 @@ try {
   assert.equal(await evaluate('Boolean(document.body.innerText.trim()) && !document.querySelector("vite-error-overlay")'), true);
   await snapshot();
   await browser("screenshot", join(output, "landing-desktop.png"));
+  for (const [file, cleanPath] of cleanHtml) {
+    const redirect = await fetch(new URL(file, target), { redirect: "manual" });
+    assert.equal(redirect.status, 308);
+    assert.equal(redirect.headers.get("location"), cleanPath);
+    await assert.rejects(fetch(new URL(file, target), { redirect: "error" }), "Redirecting filenames must not be usable as precache requests");
+    const canonical = await fetch(new URL(cleanPath, target), { redirect: "error" });
+    assert.equal(canonical.status, 200);
+    assert.equal(await canonical.text(), files.get(file).toString());
+  }
   await click("Start in this browser");
   await until(async () => await evaluate('(async () => Boolean((await navigator.serviceWorker.getRegistration())?.active))()'), "Public shell worker did not activate");
   await browser("reload");
@@ -91,7 +115,7 @@ try {
   const iconSizes = await evaluate('(async () => { const manifest = await (await fetch("/manifest.webmanifest")).json(); return Promise.all(manifest.icons.map(icon => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve([image.naturalWidth, image.naturalHeight]); image.onerror = reject; image.src = icon.src; }))); })()');
   assert.deepEqual(iconSizes, [[192, 192], [512, 512]]);
   await browser("screenshot", join(output, "installation-desktop.png"), "--full");
-  pass(`public shell ready; manifest icons decoded; native install offer ${offeredInstall ? "observed" : "not offered by this test browser"}`);
+  pass(`Pages-style HTML redirects rejected; canonical shell ready; manifest icons decoded; native install offer ${offeredInstall ? "observed" : "not offered by this test browser"}`);
 
   await click("Add Proof");
   await fill(/^Exact quote or evidence/, "Synthetic offline evidence: my sister sent a kind message.");
@@ -105,6 +129,7 @@ try {
   await snapshot(); await browser("upload", '.media-inbox input[type="file"][accept*="image/"]', pendingImage);
   await hasText("SYNTHETIC-pending.png");
   await click("Close media inbox");
+  serverOffline = true;
   await browser("set", "offline", "on");
   await browser("reload");
   await hasText("SYNTHETIC offline saved Proof");
@@ -112,10 +137,16 @@ try {
   await browser("scrollintoview", ".gallery-grid .proof-card");
   await until(async () => await evaluate('Array.from(document.querySelectorAll(".gallery-grid img")).some(image => image.complete && image.naturalWidth > 0 && image.src.startsWith("blob:"))'), "Offline saved attachment did not decode");
   const cached = await evaluate('(async () => { const result = []; for (const name of await caches.keys()) result.push({ name, urls: (await (await caches.open(name)).keys()).map(request => new URL(request.url).pathname) }); return result; })()');
-  assert(cached.every(cache => cache.urls.every(path => publicPaths.includes(path) && path !== "/proof-sw.js")), "Non-public data appeared in shell cache");
-  assert(cached.every(cache => cache.urls.length === 8), "Unexpected runtime cache growth");
+  assert.equal(cached.length, 1, "Expected one owned public shell cache");
+  assert(cached[0].name.startsWith("proof-gallery-public-shell-v1-"));
+  assert.deepEqual([...cached[0].urls].sort(), shellPaths, "Only the exact canonical public shell may be cached");
   await browser("screenshot", join(output, "offline-gallery-desktop.png"), "--full");
-  pass("offline saved attachment loads; pending media excluded; cache contains only eight public shell files");
+  await browser("open", new URL("synthetic-unavailable", target).href);
+  await hasText("This page needs a connection");
+  assert(!(await text()).includes("SYNTHETIC offline saved Proof"), "Generic offline help must not contain evidence");
+  await browser("open", target);
+  await hasText("SYNTHETIC offline saved Proof");
+  pass(`offline saved attachment and generic fallback load; pending media excluded; cache contains only ${shellPaths.length} canonical public shell files`);
 
   await browser("set", "viewport", "390", "844");
   await browser("reload");
@@ -126,6 +157,7 @@ try {
   await browser("screenshot", join(output, "installation-offline-mobile.png"), "--full");
   pass("mobile-sized offline gallery and installation help remain usable");
 
+  serverOffline = false;
   await browser("set", "offline", "off");
   await browser("set", "viewport", "1280", "900");
   await click("Add Proof");
@@ -142,6 +174,8 @@ try {
   await browser("open", target);
   await until(async () => await evaluate('(async () => { const names = await caches.keys(); return names.includes("proof-gallery-public-shell-v1-ffffffffffffffff") && names.filter(name => name.startsWith("proof-gallery-public-shell-v1-")).length === 1; })()'), "New worker did not activate and remove only old public shell");
   assert.equal(await evaluate('(async () => (await caches.keys()).includes("SYNTHETIC-unrelated-cache"))()'), true);
+  const updatedPaths = await evaluate('(async () => (await (await caches.open("proof-gallery-public-shell-v1-ffffffffffffffff")).keys()).map(request => new URL(request.url).pathname).sort())()');
+  assert.deepEqual(updatedPaths, shellPaths, "Update changed the canonical public cache allowlist");
   await hasText("SYNTHETIC offline saved Proof");
   pass("second worker waits without editor reload; activates only after old page closes; unrelated cache and Proof survive");
   const errors = await browser("errors");

@@ -445,6 +445,38 @@ describe("note-first capture", () => {
     expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
   });
 
+  it("does not save automatic tags stripped of their negation", async () => {
+    const quote = "I never finished that drawing.";
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), { target: { value: quote } });
+    expect(screen.getByLabelText(/^Tags$/)).toHaveValue("");
+    expect(screen.queryByText(/^Suggested tags:/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "creativity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].input).toMatchObject({ evidenceText: quote, tags: [] });
+  });
+
+  it("preserves explicit manual tags and the full quote when a note becomes negated", async () => {
+    const quote = "I didn’t finish that drawing.\nThose are my exact words.";
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    const note = screen.getByLabelText(/Exact quote or evidence/i);
+    fireEvent.change(note, { target: { value: "Finished the drawing." } });
+    fireEvent.change(screen.getByLabelText(/^Tags$/), { target: { value: "drawing, finished, my-choice" } });
+    fireEvent.change(note, { target: { value: quote } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use word-based organization suggestions" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use word-based organization suggestions" }));
+    expect(screen.getByLabelText(/^Tags$/)).toHaveValue("drawing, finished, my-choice");
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "creativity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].input).toMatchObject({
+      evidenceText: quote, tags: ["drawing", "finished", "my-choice"],
+    });
+  });
+
   it("opens all existing edit metadata and preserves it even when suggestions are enabled", async () => {
     const item = proofItem();
     const onSave = vi.fn().mockResolvedValue(undefined);

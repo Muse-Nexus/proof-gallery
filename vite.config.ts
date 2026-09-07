@@ -12,14 +12,23 @@ export default defineConfig({
     generateBundle: {
       order: "post",
       handler(_options, bundle) {
-        const publicAssets = ["/index.html", "/offline.html", "/manifest.webmanifest", "/favicon.svg", "/icons/proof-192.svg", "/icons/proof-512.svg"];
+        // Pages redirects physical HTML filenames; cache only canonical public URLs.
+        // The generated root index.html is hashed with the bundle below.
+        const publicFiles = {
+          "/offline": "offline.html",
+          "/manifest.webmanifest": "manifest.webmanifest",
+          "/favicon.svg": "favicon.svg",
+          "/icons/proof-192.svg": "icons/proof-192.svg",
+          "/icons/proof-512.svg": "icons/proof-512.svg",
+        };
+        const publicAssets = ["/", ...Object.keys(publicFiles)];
         const emitted = Object.keys(bundle).filter(name => /^assets\/[A-Za-z0-9_.-]+\.(?:js|css|woff2?)$/.test(name)).sort();
         const hash = createHash("sha256").update(buildProofWorker.toString());
         for (const name of Object.keys(bundle).sort()) {
           const output = bundle[name];
           hash.update(name).update(output.type === "chunk" ? output.code : output.source);
         }
-        for (const path of publicAssets.filter(path => path !== "/index.html")) hash.update(readFileSync(new URL(`./public${path}`, import.meta.url)));
+        for (const [url, file] of Object.entries(publicFiles)) hash.update(url).update(readFileSync(new URL(`./public/${file}`, import.meta.url)));
         const source = buildProofWorker([...publicAssets, ...emitted.map(name => `/${name}`)], hash.digest("hex").slice(0, 16));
         this.emitFile({ type: "asset", fileName: "proof-sw.js", source });
       },

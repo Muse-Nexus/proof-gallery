@@ -30,6 +30,11 @@ existing local store and are never added to the service-worker cache.
 The worker precaches only an explicit build-fingerprinted list: app HTML, JS,
 CSS/fonts, offline help, manifest, and icons. It never caches API responses,
 authenticated requests, evidence attachments, query-bearing URLs, or POSTs.
+Its HTML cache keys are `/` and `/offline`, not the physical `index.html` and
+`offline.html` filenames, because [Cloudflare Pages redirects HTML filenames to
+clean URLs](https://developers.cloudflare.com/pages/configuration/serving-pages/#route-matching).
+Precache requests still reject redirects and omit credentials; this does not
+expand the allowed public files.
 There are no push messages, background-sync jobs, OS share target, library reads,
 or runtime cache expansion. Browser eviction/site-data removal can remove both
 offline files and local evidence; offline availability is not durability.
@@ -64,3 +69,11 @@ to check offline saved/pending isolation and inspect the cache allowlist. Check
 that a second build waits without reloading an editor, then activates after all
 old clients close. Real OS installation remains a per-device check; a browser
 test of the manifest and offline worker alone is not that receipt.
+
+Run `bun run build` followed by `bun run test:e2e:pwa` for the repeatable synthetic
+check. Its loopback server redirects both physical HTML filenames like Pages,
+then verifies canonical precaching, offline attachments/pending isolation, and
+the waiting/activation update lifecycle. During offline checks the fixture server
+also drops connections, because browser emulation alone can leave worker fetches
+online. It uses a fresh browser session and
+never opens a personal gallery or deploys the build.
