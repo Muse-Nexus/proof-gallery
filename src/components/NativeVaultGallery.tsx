@@ -4,11 +4,23 @@ import { LOCAL_MEDIA_ACCEPT } from '../lib/media';
 import './NativeVaultGallery.css';
 import { NativeVaultClient, validNativeFields, NATIVE_ERROR, type NativeFields, type NativeInfo, type NativeList, type NativeRecord, type NativeState } from '../lib/native-vault';
 
-function NativeEditor({ record, busy, onSave, onClose }: { record: NativeRecord | null; busy: boolean; onSave: (fields: NativeFields, file?: File) => void; onClose: () => void }) {
-  const [fields, setFields] = useState<NativeFields>(record?.fields ?? { title: '', evidenceText: '', sourceType: 'other', tags: [] });
-  const [file, setFile] = useState<File>();
+interface NativeDraft {
+  readonly record: NativeRecord | null;
+  fields: NativeFields;
+  tagsText: string;
+  file?: File;
+  submissionUncertain?: boolean;
+}
+function draftFor(record: NativeRecord | null): NativeDraft {
+  return { record, fields: record ? { ...record.fields, tags: [...record.fields.tags] } : { title: '', evidenceText: '', sourceType: 'other', tags: [] }, tagsText: record?.fields.tags.join(', ') ?? '' };
+}
+function NativeEditor({ draft, busy, onChange, onSave, onClose }: { draft: NativeDraft; busy: boolean; onChange: (draft: NativeDraft) => void; onSave: (fields: NativeFields, file?: File) => void; onClose: () => void }) {
+  const { record, fields, file } = draft;
   const [error, setError] = useState('');
-  const change = (key: keyof NativeFields, value: string) => setFields(old => ({ ...old, [key]: key === 'tags' ? value.split(',').map(s => s.trim()).filter(Boolean) : value || (['title', 'evidenceText'].includes(key) ? '' : undefined) }));
+  const change = (key: keyof NativeFields, value: string) => onChange({ ...draft,
+    ...(key === 'tags' ? { tagsText: value } : {}),
+    fields: { ...fields, [key]: key === 'tags' ? value.split(',').map(s => s.trim()).filter(Boolean) : value || (['title', 'evidenceText'].includes(key) ? '' : undefined) },
+  });
   return <form className="proof-editor" onSubmit={e => { e.preventDefault(); if (!validNativeFields(fields, true) || (!record?.media && !file && !fields.evidenceText.trim())) { setError('Choose a category and add a note or attachment. Check field lengths and dates.'); return; } setError(''); onSave(fields, file); }} aria-label={record?.state === 'pending' ? 'Review native evidence' : 'Edit native evidence'}>
     <h2>{record?.state === 'pending' ? 'Review before saving as Proof' : record ? 'Edit saved Proof' : 'Add to the native vault'}</h2>
     <p>Keep the original words. Unknown dates and details may stay blank. Existing media and source receipts remain attached.</p>
@@ -18,8 +30,10 @@ function NativeEditor({ record, busy, onSave, onClose }: { record: NativeRecord 
     <label>Occurred date<input type="date" value={fields.occurredOn ?? ''} onChange={e => change('occurredOn', e.target.value)} disabled={busy} /></label>
     <label>Source type<select value={fields.sourceType} onChange={e => change('sourceType', e.target.value)} disabled={busy}>{PROOF_SOURCE_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select></label>
     {(['source', 'person', 'project'] as const).map(key => <label key={key}>{key[0].toUpperCase() + key.slice(1)}<input value={fields[key] ?? ''} onChange={e => change(key, e.target.value)} maxLength={2000} disabled={busy} /></label>)}
-    <label>Tags, separated by commas<input defaultValue={fields.tags.join(', ')} onChange={e => change('tags', e.target.value)} disabled={busy} /></label>
-    {!record && <label>Optional photo or clip<input type="file" accept={LOCAL_MEDIA_ACCEPT} onChange={e => setFile(e.target.files?.[0])} disabled={busy} /></label>}
+    <label>Tags, separated by commas<input value={draft.tagsText} onChange={e => change('tags', e.target.value)} disabled={busy} /></label>
+    {!record && <label>Optional photo or clip<input type="file" accept={LOCAL_MEDIA_ACCEPT} onChange={e => onChange({ ...draft, file: e.target.files?.[0] })} disabled={busy} /></label>}
+    {file && <p>Selected attachment: {file.name} <button type="button" disabled={busy} onClick={() => onChange({ ...draft, file: undefined })}>Remove selected attachment</button></p>}
+    {draft.submissionUncertain && <p role="alert">A save may already have completed before this page was hidden. Check saved Proof before repeating it.</p>}
     {error && <p role="alert">{error}</p>}
     <button type="submit" disabled={busy}>{record?.state === 'pending' ? 'Approve and save Proof' : 'Save in native vault'}</button>
     <button type="button" onClick={onClose} disabled={busy}>Cancel</button>
@@ -35,14 +49,20 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   const [query, setQuery] = useState(''); const [category, setCategory] = useState(''); const [tag, setTag] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   const [hidden, setHidden] = useState(document.hidden);
-  const [editor, setEditor] = useState<{ record: NativeRecord | null } | null>(null);
+  const [editor, setEditorState] = useState<NativeDraft | null>(null);
+  const editorRef = useRef<NativeDraft | null>(null);
+  const [draftSuspended, setDraftSuspended] = useState(false);
+  function setEditor(next: NativeDraft | null) { editorRef.current = next; setEditorState(next); }
   const [urls, setUrls] = useState<Record<string, string>>({});
   const client = useRef<NativeVaultClient | null>(null); const epoch = useRef(0);
   const liveURLs = useRef(new Set<string>()); const busyRef = useRef(false);
-  function clearEvidence() {
+  function clearEvidence(preserveDraft = false) {
     for (const url of liveURLs.current) URL.revokeObjectURL(url);
-    liveURLs.current.clear(); setUrls({}); setResult(null); setEditor(null);
+    liveURLs.current.clear(); setUrls({}); setResult(null);
+    if (preserveDraft) setDraftSuspended(Boolean(editorRef.current));
+    else { setEditor(null); setDraftSuspended(false); }
   }
+  function confirmDiscardDraft() { return !editorRef.current || window.confirm('Discard this unsaved native draft? It is kept only in this page’s memory.'); }
   function disconnect(note = 'Disconnected. The native vault remains on this Mac.') {
     epoch.current++; client.current?.disconnect(); client.current = null;
     clearEvidence(); setInfo(null); setCode(''); setQuery(''); setCategory(''); setTag('');
@@ -50,12 +70,12 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   }
   useEffect(() => {
     const visibility = () => {
-      epoch.current++; client.current?.cancel(); clearEvidence(); setCode(''); setQuery(''); setCategory(''); setTag('');
+      epoch.current++; client.current?.cancel(); clearEvidence(true); setCode(''); setQuery(''); setCategory(''); setTag('');
       busyRef.current = false; setBusy(false); setHidden(document.hidden);
-      if (document.hidden) { setMessage('Evidence and unsaved edits cleared while this page is hidden.'); return; }
+      if (document.hidden) { setMessage('Evidence hidden. An unsaved draft, if any, stays only in memory.'); return; }
       const current = client.current, currentEpoch = epoch.current;
       if (current) {
-        setInfo(null); busyRef.current = true; setBusy(true);
+        busyRef.current = true; setBusy(true);
         void current.info().then(next => {
           if (client.current === current && epoch.current === currentEpoch) { setInfo(next); setMessage('Permission checked. Choose saved Proof or pending review to continue.'); }
         }).catch(() => { if (epoch.current === currentEpoch) disconnect(NATIVE_ERROR); }).finally(() => {
@@ -63,8 +83,9 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
         });
       }
     };
-    document.addEventListener('visibilitychange', visibility);
-    return () => { document.removeEventListener('visibilitychange', visibility); epoch.current++; client.current?.disconnect(); for (const url of liveURLs.current) URL.revokeObjectURL(url); liveURLs.current.clear(); };
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (editorRef.current) { event.preventDefault(); event.returnValue = ''; } };
+    document.addEventListener('visibilitychange', visibility); window.addEventListener('beforeunload', beforeUnload);
+    return () => { document.removeEventListener('visibilitychange', visibility); window.removeEventListener('beforeunload', beforeUnload); epoch.current++; client.current?.disconnect(); editorRef.current = null; for (const url of liveURLs.current) URL.revokeObjectURL(url); liveURLs.current.clear(); };
   }, []);
   useEffect(() => {
     if (!info) return;
@@ -101,6 +122,7 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
     finally { if (epoch.current === currentEpoch) { busyRef.current = false; setBusy(false); } }
   }
   function load(nextState: NativeState, nextOffset = 0) {
+    if (!confirmDiscardDraft()) return;
     const currentEpoch = epoch.current;
     void run(async c => {
       clearEvidence(); const list = await c.list(nextState, nextOffset, nextState === 'saved' ? query : '', category, tag);
@@ -111,6 +133,7 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   function save(fields: NativeFields, file?: File) {
     const selected = editor?.record, currentEpoch = epoch.current;
     void run(async c => {
+      if (editorRef.current) setEditor({ ...editorRef.current, submissionUncertain: true });
       await c.write(selected ? selected.state === 'pending' ? 'approve' : 'edit' : 'create', fields, selected ?? undefined, file);
       if (epoch.current !== currentEpoch) return;
       clearEvidence(); setMessage('Saved in the native vault. Open saved Proof when you choose.');
@@ -125,10 +148,10 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   }
   return <main className="app-shell native-vault">
     <header><h1>Native vault on this Mac</h1><p>A separate collection kept by the companion. This connection does not import or merge your browser collection.</p>
-      <button onClick={() => { disconnect(); onExit(); }}>Return to browser gallery</button>
+      <button onClick={() => { if (confirmDiscardDraft()) { disconnect(); onExit(); } }}>Return to browser gallery</button>
       {info && <button onClick={() => disconnect()}>Disconnect native vault</button>}
     </header>
-    <p>Native storage is local to this OS account and is not encrypted by Proof. Browser backups do not include it. Hide or leave this page to clear displayed evidence and unsaved edits.</p>
+    <p>Native storage is local to this OS account and is not encrypted by Proof. Browser backups do not include it. Hiding this page hides evidence and keeps your unsaved draft only in memory. Returning requires permission and an explicit resume. Leaving discards the draft.</p>
     {message && <p role="status">{message}</p>}
     {!info && !hidden && <form onSubmit={connect} autoComplete="off">
       <label>Native gallery connection code<input type="password" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" spellCheck={false} maxLength={110} disabled={busy} /></label>
@@ -137,14 +160,15 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
     </form>}
     {info && !hidden && <>
       <p>Collection: {info.collectionID} · Permission expires {info.expiresAt}</p>
-      <nav aria-label="Native collection"><button disabled={busy} onClick={() => load('saved')}>Open saved Proof</button><button disabled={busy} onClick={() => load('pending')}>Open pending review</button><button disabled={busy} onClick={() => { clearEvidence(); setEditor({ record: null }); }}>Add native Proof</button></nav>
+      <nav aria-label="Native collection"><button disabled={busy} onClick={() => load('saved')}>Open saved Proof</button><button disabled={busy} onClick={() => load('pending')}>Open pending review</button><button disabled={busy} onClick={() => { if (confirmDiscardDraft()) { clearEvidence(); setEditor(draftFor(null)); } }}>Add native Proof</button></nav>
       <form onSubmit={e => { e.preventDefault(); load('saved'); }}>
         <label>Search saved native Proof<input value={query} onChange={e => setQuery(e.target.value)} disabled={busy} /></label>
         <label>Category filter<select value={category} onChange={e => setCategory(e.target.value)} disabled={busy}><option value="">All categories</option>{PROOF_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
         <label>Tag filter<input value={tag} onChange={e => setTag(e.target.value)} disabled={busy} maxLength={100} /></label>
         <button disabled={busy}>Search saved Proof</button>
       </form>
-      {editor && <NativeEditor key={editor.record?.revision ?? 'new'} record={editor.record} busy={busy} onSave={save} onClose={() => setEditor(null)} />}
+      {editor && draftSuspended && <p>A draft is available in this page’s memory. <button disabled={busy} onClick={() => { const currentEpoch = epoch.current; void run(async () => { if (epoch.current === currentEpoch) setDraftSuspended(false); }); }}>Resume draft</button></p>}
+      {editor && !draftSuspended && <NativeEditor key={editor.record?.revision ?? 'new'} draft={editor} onChange={setEditor} busy={busy} onSave={save} onClose={() => { if (confirmDiscardDraft()) setEditor(null); }} />}
       {result && <section aria-label={state === 'pending' ? 'Native pending review' : 'Native saved Proof'}>
         <h2>{state === 'pending' ? 'Pending review — not saved Proof' : 'Saved Proof'}</h2>
         <p>{result.matching === 'local-semantic' ? 'On-device meaning matching' : result.matching === 'local-literal-text' ? 'Literal text matching (local fallback)' : 'Newest added first'}{result.searchScope ? ` · ${result.searchScope}` : ''}{result.searchedCount !== undefined ? ` · ${result.searchedCount} records searched` : ''}</p>
@@ -159,9 +183,10 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
           {record.media && !urls[record.id] && <button disabled={busy} onClick={() => preview(record)}>Open attachment</button>}
           {urls[record.id] && (record.media?.mimeType.startsWith('video/') ? <video src={urls[record.id]} controls playsInline preload="metadata" aria-label="Saved evidence attachment" /> : <img src={urls[record.id]} alt="Saved evidence attachment" referrerPolicy="no-referrer" />)}
           <details><summary>Original source receipt and provenance</summary><pre>{JSON.stringify({ receipt: record.receipt, provenance: record.provenance, media: record.media, restoreReceipt: record.restoreReceipt }, null, 2)}</pre></details>
-          <button disabled={busy} onClick={() => setEditor({ record })}>{record.state === 'pending' ? 'Review candidate' : 'Edit Proof'}</button>
+          <button disabled={busy} onClick={() => { if (confirmDiscardDraft()) setEditor(draftFor(record)); }}>{record.state === 'pending' ? 'Review candidate' : 'Edit Proof'}</button>
           <button disabled={busy} onClick={() => {
             if (!window.confirm(record.state === 'pending' ? 'Remove this pending candidate from the native vault?' : 'Delete this saved item from the native vault? Original source files remain.')) return;
+            if (!confirmDiscardDraft()) return;
             const currentEpoch = epoch.current;
             void run(async c => { await c.delete(record); if (epoch.current === currentEpoch) { clearEvidence(); setMessage('Removed from the native vault.'); } });
           }}>{record.state === 'pending' ? 'Remove candidate' : 'Delete Proof'}</button>

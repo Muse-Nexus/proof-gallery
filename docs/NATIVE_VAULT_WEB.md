@@ -47,8 +47,15 @@ errors, tokens or source paths are echoed as diagnostics.
 
 Disconnect, expiry, failed authorization and leaving the view abort requests and
 clear evidence, edit drafts, temporary media URLs and connection state. Hiding
-the page clears evidence and unsaved drafts immediately. Returning checks current
-permission before a neutral screen; evidence must be opened again. While visible,
+the page removes displayed evidence and temporary media URLs immediately, while
+keeping an unsaved editor draft and its selected File only in page memory. Returning
+checks current permission before a neutral screen; **Resume draft** is a separate
+owner action with another permission check. Neither check retrieves evidence or
+reveals the draft automatically. Existing edits keep their original record revision
+so stale saves conflict instead of overwriting newer edits. Explicit navigation or
+replacing/canceling a draft confirms discard; browser unload warns of an unsaved
+draft. A save interrupted by hiding may already have completed, so a resumed draft
+warns the owner to inspect saved Proof before repeating the write. While visible,
 an auth-only check every 15 seconds bounds detection of revocation when idle; each
 owner action also revalidates. This is polling, not instantaneous cross-process
 revocation. The native authority separately checks every request. No evidence is
@@ -64,7 +71,8 @@ separate collection and do not include the native vault.
 Focused synthetic tests cover strict connection parsing, no automatic retrieval,
 owner/collection and pending isolation, full literal text, malformed/expired
 grants, query byte bounds, bounded streaming, hash/MIME verification, hidden-page
-clearing and fresh permission checks, revocation, pending approval and late-result
+redaction, in-memory text/File preservation with explicit resume and fresh permission
+checks, revocation, pending approval and late-result
 suppression. Run:
 
 ```sh
