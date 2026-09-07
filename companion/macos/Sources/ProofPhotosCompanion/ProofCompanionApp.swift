@@ -12,7 +12,14 @@ import CompanionCore
 }
 
 @MainActor final class CompanionAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    let model = PhotosModel()
+    let model: PhotosModel
+    let storage: NativeVaultController
+    override init() {
+        let model = PhotosModel(); self.model = model
+        storage = NativeVaultController(onReady: { [weak model] in model?.attachVault($0) ?? false },
+                                        beforeClear: { [weak model] in model?.prepareForVaultClear() })
+        super.init()
+    }
     private var window: NSWindow?
     private var statusItem: NSStatusItem?
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -23,7 +30,7 @@ import CompanionCore
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 780),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Proof Photos Companion"; window.delegate = self
-        window.contentView = NSHostingView(rootView: CompanionView(model: model))
+        window.contentView = NSHostingView(rootView: CompanionView(model: model, storage: storage))
         window.center(); window.makeKeyAndOrderFront(nil); self.window = window
         NSApp.activate(ignoringOtherApps: true)
         let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -34,18 +41,23 @@ import CompanionCore
             item.target = self; statusMenu.addItem(item)
         }
         status.menu = statusMenu; statusItem = status
-        model.restoreSource()
+        storage.restoreIfConfigured()
     }
     @objc private func reopenWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc private func pauseCollection() { model.pause() }
     @objc private func quitCompanion() { NSApp.terminate(nil) }
+    private func suspendForegroundCollection() {
+        if model.allowICloudDownloads || !model.backgroundEnabled { model.pause() }
+    }
+    func applicationWillHide(_ notification: Notification) { suspendForegroundCollection() }
+    func windowDidMiniaturize(_ notification: Notification) { suspendForegroundCollection() }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         reopenWindow(); return true
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if model.backgroundEnabled {
+        if model.backgroundEnabled || storage.keepsServicesRunningAfterWindowClose {
             // iCloud is only a visible, separately authorized one-shot batch.
-            if model.allowICloudDownloads { model.pause() }
+            if model.allowICloudDownloads || !model.backgroundEnabled { model.pause() }
             sender.orderOut(nil); return false
         }
         // Route closing through the same unsaved-export guard as Cmd-Q.
@@ -61,11 +73,12 @@ import CompanionCore
         model.stopForTermination()
         return .terminateNow
     }
-    func applicationWillTerminate(_ notification: Notification) { model.stopForTermination() }
+    func applicationWillTerminate(_ notification: Notification) { model.stopForTermination(); storage.stopForTermination() }
 }
 
 struct CompanionView: View {
     @ObservedObject var model: PhotosModel
+    @ObservedObject var storage: NativeVaultController
     @StateObject private var login = LoginItemController(service: SystemLoginItemService())
     @State private var confirmDisconnect = false
     @State private var confirmClear = false
@@ -81,7 +94,7 @@ struct CompanionView: View {
         }
     }
     var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
+            ScrollView { VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
                     Image(systemName: "photo.on.rectangle.angled").font(.largeTitle).foregroundStyle(.orange)
                     VStack(alignment: .leading, spacing: 4) {
@@ -92,6 +105,7 @@ struct CompanionView: View {
                     Text(model.active ? (model.allowICloudDownloads ? "Private · iCloud download batch" : "Watching selected source") : "Private · on-device review").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("Let your photos be easier to find. Choose a source; review what belongs in Proof. No image is labelled as love, identity, or accomplishment for you.")
+                NativeVaultView(storage: storage)
                 Toggle("Start this companion when I log in", isOn: Binding(
                     get: { login.state == .enabled || login.state == .requiresApproval },
                     set: { login.setEnabled($0) }))
@@ -119,6 +133,21 @@ struct CompanionView: View {
                             Button("Automatically save from this exact folder…") {
                                 model.confirmTrustedFolder(category: folderCategory,
                                     tags: folderTags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+                            }
+                        }
+                    }
+                    if model.canTrustPhotos {
+                        if model.trustedFolder {
+                            Button("Require individual Photos review again", action: model.requireFolderReview)
+                        } else {
+                            HStack {
+                                Picker("Your category", selection: $folderCategory) {
+                                    ForEach(["belonging", "competence", "creativity", "parenting", "recovery", "money", "shipped", "awards", "kindness_received"], id: \.self) { Text($0).tag($0) }
+                                }
+                                TextField("Your tags, separated by commas", text: $folderTags)
+                            }
+                            Button("Automatically save from this Photos source…") {
+                                model.confirmTrustedPhotos(category: folderCategory, tags: folderTags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
                             }
                         }
                     }
@@ -213,7 +242,7 @@ struct CompanionView: View {
                 Text("Prepared photos are memory-only until exported. The export is not a saved-Proof backup. Import it into the private review inbox; category and saving remain your choice.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            .padding(24).frame(minWidth: 730, minHeight: 650)
+            .padding(24) }.frame(minWidth: 730, minHeight: 650)
             .confirmationDialog("Disconnect and discard prepared photos?", isPresented: $confirmDisconnect) {
                 Button("Disconnect and clear", role: .destructive, action: model.disconnect)
             } message: { Text("Unexported photos will leave this app. Originals, exported files, and saved Proof are untouched. Revoke the OS grant separately in System Settings.") }

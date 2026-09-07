@@ -72,6 +72,7 @@ private final class ResourceRead: @unchecked Sendable {
     var hasVault: Bool { vault != nil }
     var canSetBackground: Bool { sourceGrant != nil }
     var trustedFolder: Bool { sourceGrant?.configuration.mode == .trusted }
+    var canTrustPhotos: Bool { sourceGrant?.configuration.provider == .photos }
     var selectedSourceLabel: String { sourceGrant?.configuration.label ?? "" }
     private let bridge = LocalBridge()
     private var bridgeGeneration = UUID()
@@ -90,11 +91,15 @@ private final class ResourceRead: @unchecked Sendable {
         super.init()
     }
 
-    func attachVault(_ authority: any VaultAuthority) {
-        guard vault == nil, !active, !scanning else { return }
+    @discardableResult func attachVault(_ authority: any VaultAuthority) -> Bool {
+        if let vault { return vault === authority }
+        // Preserve a prepared legacy batch, but stop its in-flight reads before
+        // switching the collector to this explicitly selected durable authority.
+        stopForTermination()
         vault = authority
         objectWillChange.send()
         restoreSource()
+        return true
     }
 
     // Explicit startup reconciliation: no authorization prompts or fallback scope.
@@ -165,12 +170,27 @@ private final class ResourceRead: @unchecked Sendable {
 
     func requireFolderReview() {
         pause()
-        guard let vault, let grant = sourceGrant, grant.configuration.provider == .folder else { return }
+        guard let vault, let grant = sourceGrant else { return }
         var config = grant.configuration; config.mode = .review; config.category = nil; config.tags = []
         do {
             sourceGrant = try vault.updateSourceGrant(id: grant.id, revision: grant.revision, configuration: config, paused: true)
             message = "Individual review restored for new images. Start when ready."
         } catch { message = "Collection stopped. The changed review choice could not be saved." }
+    }
+
+    func confirmTrustedPhotos(category: String, tags: [String]) {
+        pause()
+        guard let vault, let grant = sourceGrant, grant.configuration.provider == .photos else { return }
+        let alert = NSAlert()
+        alert.messageText = "Automatically save from this selected Photos source?"
+        alert.informativeText = "Source: \(grant.configuration.label)\nSelected ID: \(grant.configuration.sourceID)\nSince: \(dayLabel(since))\nCategory: \(category)\nTags: \(tags.joined(separator: ", "))\n\nNew validated images in this bounded source will be saved without individual review after Start. Existing pending items stay pending. No identity or emotional meaning is inferred. Background and iCloud access remain separate choices."
+        alert.addButton(withTitle: "Keep individual review"); alert.addButton(withTitle: "Confirm this Photos source")
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        var config = grant.configuration; config.mode = .trusted; config.category = category; config.tags = tags
+        do {
+            sourceGrant = try vault.updateSourceGrant(id: grant.id, revision: grant.revision, configuration: config, paused: true)
+            message = "Selected Photos source approved. Start to save new images with your category and tags."
+        } catch { message = "Could not confirm the selected source. Collection remains paused." }
     }
 
     func setBackgroundEnabled(_ enabled: Bool) {
@@ -194,10 +214,16 @@ private final class ResourceRead: @unchecked Sendable {
             config = existing.configuration
         } else {
             if sourceGrant == nil { since = Calendar.current.startOfDay(for: since) }
-            config = VaultSourceConfiguration(provider: .photos, sourceID: source,
-                label: source == "recent" ? "Recent Photos" : source == "favorites" ? "Favorites" : "Selected Photos album",
-                backgroundEnabled: backgroundEnabled,
-                selection: ["source": .string(source), "since": .number(since.timeIntervalSince1970)])
+            let selection: [String: VaultJSON] = ["source": .string(source), "since": .number(since.timeIntervalSince1970)]
+            if let existing = sourceGrant {
+                guard existing.configuration.provider == .photos, existing.configuration.sourceID == source,
+                      existing.configuration.selection == selection else { throw VaultError.staleRevision }
+                config = existing.configuration
+            } else {
+                config = VaultSourceConfiguration(provider: .photos, sourceID: source,
+                    label: source == "recent" ? "Recent Photos" : source == "favorites" ? "Favorites" : "Selected Photos album",
+                    backgroundEnabled: backgroundEnabled, selection: selection)
+            }
         }
         if let grant = sourceGrant {
             guard grant.configuration.provider == config.provider, grant.configuration.sourceID == config.sourceID,
@@ -317,6 +343,12 @@ private final class ResourceRead: @unchecked Sendable {
             catch { message = "Collection stopped. Durable pause could not be confirmed; reconnect before restarting."; return }
         }
         message = "Paused. Prepared photos remain in memory until you export or clear them."
+    }
+
+    func prepareForVaultClear() {
+        pause(); sourceGrant = nil; source = ""; backgroundEnabled = false; folderSelected = false
+        connected = false; photos = []; contexts = [:]; seen = []; lastScopeKey = nil
+        message = "Collection stopped for native storage clearing."
     }
 
     func stopBridge() {
@@ -480,7 +512,7 @@ private final class ResourceRead: @unchecked Sendable {
             guard self.generation == scanGeneration else { return }
             self.scanning = false; self.activeRead = nil; self.activeTextRead = nil; self.task = nil
             if mayDownload { self.pause() }
-            self.message = self.backgroundEnabled ? "Selected source checked. New candidates are in the private vault for review." : "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan. Nothing saved as Proof."
+            self.message = self.hasVault ? (self.trustedFolder ? "Selected source checked. New images were saved under your source approval." : "Selected source checked. New candidates are in the private vault for review.") : "\(self.photos.count) prepared for review. \(self.skipped) skipped this scan. Nothing saved as Proof."
                 + (mayDownload ? " Download batch finished and paused; download permission switched off." : "")
             if !mayDownload && self.scanAgain { self.scan() }
         }

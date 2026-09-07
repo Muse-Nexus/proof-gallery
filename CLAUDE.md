@@ -6,6 +6,14 @@ tasks or receipts. Reuse the permissioned source → private review → saved Pr
 boundary. Web file intake does not inherit native Photos permissions. The Mac
 companion is a separately permissioned, read-only, bounded source adapter; its
 review-file handoff is not cross-device sync and must never bypass approval.
+The full-version native vault is a separate explicit authority shared by its
+collector, gallery connection and read-only MCP helper. Read AGENTS.md's major
+native authority instruction plus docs/NATIVE_SETUP.md and docs/LOCAL_MCP.md.
+Background, exact-source automatic saving, login, assistant access and reminders
+each need separate consent; default candidates stay pending. No grant restoration
+from backups, hidden provider access, model-approved evidence or private evidence
+in lessons/instructions. Generic reminder delivery is not permission to surface
+quotes or images. Source builds and passing tests are not public native release.
 The browser folder source needs a selected read-only handle and explicit Start.
 It checks bounded top-level files while the gallery is open and visible. Review
 is the default. The owner can explicitly confirm automatic saving for one exact

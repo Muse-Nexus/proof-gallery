@@ -47,7 +47,7 @@ final class SyntheticVaultBridge {
         let bytes = Data([137,80,78,71,13,10,26,10,4])
         return VaultInput(fields: VaultFields(evidenceText: "I did not promise a result. Synthetic creativity evidence.", occurredOn: "2026-08-03", source: "Literal synthetic source"),
             media: VaultMedia(filename: "synthetic.png", mimeType: "image/png", sha256: digest(bytes), bytes: bytes),
-            receipt: VaultProviderReceipt(provider: .folder, sourceID: "synthetic-folder", originalFilename: "synthetic.png", originalSha256: digest(bytes), scope: "Selected synthetic folder"))
+            receipt: VaultProviderReceipt(provider: .folder, sourceID: "synthetic-folder", originalFilename: "synthetic.png", originalSha256: digest(bytes), captureDate: "2026-08-03T12:00:00Z", timeZone: "UTC", scope: "Selected synthetic folder"))
     }
     func stage() throws -> VaultRecord {
         let grant = try vault.createSourceGrant(VaultSourceConfiguration(provider: .folder, sourceID: "synthetic-folder", label: "Synthetic"))

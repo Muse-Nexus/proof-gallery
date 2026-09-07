@@ -54,6 +54,16 @@ On-device OCR and metadata are review aids, not verified quotes or inferred
 identities. The native installer is a prerelease; public notarized distribution
 is still pending. Browser media selection works without it on Mac, PC, or phone.
 
+### Full-version native work (not yet released)
+
+This branch adds a durable private Mac collection, explicit background source
+consent, a same-store gallery connection, read-only MCP access and separately
+opted-in generic reminders. Source and assistant permissions do not restore from
+backups or appear just because you install the app. See [native setup](docs/NATIVE_SETUP.md)
+and [completion gates](docs/FULL_VERSION_PLAN.md). The released website and a
+local source build are not a notarized installer or verified Windows/Android
+background service; those platform and distribution gates remain separate.
+
 ## Your evidence stays yours
 
 The code is public and MIT licensed. Personal evidence does not belong in this

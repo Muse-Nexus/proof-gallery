@@ -11,6 +11,7 @@ final class VaultBridge: @unchecked Sendable {
     private var listener: NWListener?
     private var connections: [UUID: NWConnection] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var authorizedRequests: [UUID: VaultBridgeRequest] = [:]
     private var session = UUID()
     private var port: UInt16 = 0
     private var windowStart = DispatchTime.now().uptimeNanoseconds
@@ -45,9 +46,11 @@ final class VaultBridge: @unchecked Sendable {
         session = UUID(); listener?.cancel(); listener = nil; port = 0
         for task in tasks.values { task.cancel() }; tasks.removeAll()
         for connection in connections.values { connection.cancel() }; connections.removeAll()
+        authorizedRequests.removeAll()
     }
     private func finish(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()
+        authorizedRequests.removeValue(forKey: id)
         connections.removeValue(forKey: id)?.cancel()
     }
     private func accept(_ connection: NWConnection, session: UUID) {
@@ -83,7 +86,9 @@ final class VaultBridge: @unchecked Sendable {
                 }
                 do {
                     request = try VaultBridgeRequest.parse(buffer.subdata(in: 0..<end.upperBound), port: self.port)
-                    if let request, !request.preflight { try self.service.authorize(request) }
+                    if let request, !request.preflight {
+                        try self.service.authorize(request); self.authorizedRequests[id] = request
+                    }
                 } catch { self.respond(id, session: session, status: "403 Forbidden", data: Data(), cors: request?.gallery == true); return }
                 buffer.removeSubrange(0..<end.upperBound)
             }
@@ -135,6 +140,10 @@ final class VaultBridge: @unchecked Sendable {
     private func sendBody(_ id: UUID, session: UUID, data: Data, offset: Int) {
         guard self.session == session, let connection = connections[id] else { return }
         guard offset < data.count else { finish(id); return }
+        if let request = authorizedRequests[id] {
+            do { try service.authorize(request) }
+            catch { finish(id); return }
+        }
         let end = min(offset + 64 * 1024, data.count)
         connection.send(content: data.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
             guard let self, self.session == session else { return }

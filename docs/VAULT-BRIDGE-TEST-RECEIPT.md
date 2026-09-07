@@ -43,8 +43,10 @@ platform, native UI usability or real-source collection. Semantic ranking may us
 the existing on-device engine; both its label and literal fallback are accepted,
 while exact returned evidence is checked. No cloud-model request is added.
 
-Read-only review concern sent to the lead: `VaultBridge` authorizes before sending
-a response but not at each body chunk. A stream already in progress can continue
-after a midstream revocation. Initial-request rejection is tested; deterministic
-midstream cancellation is not covered by this receipt and needs a separate fix
-or an explicit in-flight-transfer limitation.
+Read-only review caught missing midstream revalidation. The integration now
+rechecks the connection grant before each 64 KiB body chunk and drops its
+in-memory token on connection finish/stop. Bytes already transmitted cannot be
+retracted; deterministic midstream cancellation remains an additional test gate.
+The integration fixture includes explicit synthetic capture metadata, matching
+the stricter source rule that an occurred date cannot be invented when its
+provider receipt has no capture date.
