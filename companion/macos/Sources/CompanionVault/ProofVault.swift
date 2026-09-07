@@ -6,15 +6,17 @@ import CompanionCore
 /// not software running as this same user. Active storage is not encrypted.
 public final class ProofVault: VaultAuthority, @unchecked Sendable {
     public let collectionID: String
+    public let ownerID: String
     private let db: VaultDatabase
     private let lock = NSRecursiveLock()
     private let clock: () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(directory: URL, collectionID: String, now: @escaping () -> Date = Date.init) throws {
+    public init(directory: URL, collectionID: String, ownerID: String = "local-mac-owner", now: @escaping () -> Date = Date.init) throws {
         guard UUID(uuidString: collectionID) != nil else { throw VaultError.invalid }
-        self.collectionID = collectionID; self.clock = now
+        try VaultValidation.text(ownerID, max: 200, empty: false)
+        self.collectionID = collectionID; self.ownerID = ownerID; self.clock = now
         self.db = try VaultDatabase(directory: directory)
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         try transaction {
@@ -22,6 +24,9 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
             if let data = rows.first?.first ?? nil {
                 guard String(data: data, encoding: .utf8) == collectionID else { throw VaultError.forbidden }
             } else { try db.run("INSERT INTO metadata VALUES ('collection', ?)", [.text(collectionID)]) }
+            let owner = try db.rows("SELECT value FROM metadata WHERE key='owner'").first?.first ?? nil
+            if let owner { guard String(data: owner, encoding: .utf8) == ownerID else { throw VaultError.forbidden } }
+            else { try db.run("INSERT INTO metadata VALUES ('owner',?)", [.text(ownerID)]) }
             let version = try db.rows("SELECT value FROM metadata WHERE key='version'").first?.first ?? nil
             if let version { guard String(data: version, encoding: .utf8) == "1" else { throw VaultError.unavailable } }
             else { try db.run("INSERT INTO metadata VALUES ('version','1')") }
@@ -67,7 +72,7 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
             guard !current.revoked, current.configuration.provider == configuration.provider,
                   current.configuration.sourceID == configuration.sourceID else { throw VaultError.forbidden }
             let next = VaultSourceGrant(id: id, revision: UUID().uuidString, configuration: configuration,
-                approvedAt: isoTimestamp(clock()), paused: paused, revoked: false)
+                approvedAt: configuration == current.configuration ? current.approvedAt : isoTimestamp(clock()), paused: paused, revoked: false)
             try putSource(next); return next
         }
     }
@@ -297,6 +302,78 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
         try withClient(token: token, kind: .assistant, scope: .savedMedia, collectionID: collectionID) {
             _ = try get(token: token, collectionID: collectionID, id: id)
             return try media(id: id, revision: revision)
+        }
+    }
+
+    // MARK: Separately opted-in reminders. Never exposed to browser/MCP clients.
+    public func reminderConsent() throws -> ReminderConsent? {
+        try serialized { try decode(ReminderConsent.self, db.rows("SELECT body FROM reminder WHERE id='owner'")).first }
+    }
+    public func setReminderConsent(_ proposed: ReminderConsent, expectedRevision: Int?) throws -> ReminderConsent {
+        guard proposed.ownerID == ownerID, proposed.collectionID == collectionID,
+              (0..<1440).contains(proposed.scheduledMinute), (1...525_600).contains(proposed.cooldownMinutes),
+              (TimeZone.knownTimeZoneIdentifiers.contains(proposed.timeZone) || proposed.timeZone == "UTC"),
+              proposed.quietHours.map({ (0..<1440).contains($0.startMinute) && (0..<1440).contains($0.endMinute) }) ?? true else { throw VaultError.invalid }
+        return try transaction {
+            let current = try reminderConsent()
+            guard current?.revision == expectedRevision else { throw VaultError.staleRevision }
+            let data = try db.rows("SELECT value FROM metadata WHERE key='reminderRevision'").first?.first ?? nil
+            let previous: Int
+            if let data {
+                guard let n = Int(String(data: data, encoding: .utf8) ?? ""), n >= 0, n < Int.max else { throw VaultError.storage }
+                previous = n
+            } else { previous = 0 }
+            var next = proposed; next.revision = previous + 1
+            try db.run("INSERT OR REPLACE INTO metadata VALUES ('reminderRevision',?)", [.text(String(next.revision))])
+            try db.run("INSERT OR REPLACE INTO reminder VALUES ('owner',?,?)", [.text(String(next.revision)), .blob(try encoder.encode(next))])
+            return next
+        }
+    }
+    public func reminderLedger() throws -> ReminderLedger {
+        try serialized {
+            let rows = try db.rows("SELECT id,claimed_at FROM deliveries")
+            let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var keys = Set<String>(), last: Date?
+            for row in rows {
+                guard let keyData = row[0], let dateData = row[1], let key = String(data: keyData, encoding: .utf8),
+                      let dateText = String(data: dateData, encoding: .utf8), let date = formatter.date(from: dateText) else { throw VaultError.storage }
+                keys.insert(key); last = max(last ?? date, date)
+            }
+            return ReminderLedger(claimedKeys: keys, lastClaimedAt: last)
+        }
+    }
+    /// A claim commits BEFORE any OS call. Unknown/failed delivery remains consumed.
+    /// The coordinator still owns immediate notification cancellation on Pause/Off.
+    public func claimReminder(permission: ReminderNotificationPermission, observedAt: Date, expectedRevision: Int) throws -> ReminderDecision {
+        try transaction {
+            guard let consent = try reminderConsent(), consent.revision == expectedRevision else { return .skip(.stale) }
+            let records = try decode(VaultRecord.self, db.rows("SELECT record FROM records WHERE state='saved'"))
+                .filter { $0.approval != nil && $0.collectionID == collectionID }
+                .map { ReminderRecord(id: $0.id, ownerID: ownerID, collectionID: collectionID, state: .saved) }
+            let ledger = try reminderLedger()
+            guard ledger.claimedKeys.count < 100_000 else { throw VaultError.capacity }
+            let now = clock()
+            let decision = ReminderPolicy.evaluate(snapshot: ReminderSnapshot(consent: consent, notificationPermission: permission,
+                observedAt: observedAt, ledger: ledger, records: records), now: now)
+            if case .notify(let intent) = decision {
+                try db.run("INSERT INTO deliveries VALUES (?,?,?)", [.text(intent.claimKey), .text(String(intent.consentRevision)), .text(isoTimestamp(now))])
+            }
+            return decision
+        }
+    }
+    /// Recheck immediately before OS submission after any suspension/await.
+    public func isReminderClaimCurrent(_ intent: ReminderIntent) throws -> Bool {
+        try serialized {
+            guard let consent = try reminderConsent(), consent.enabled, !consent.paused,
+                  consent.revision == intent.consentRevision, consent.ownerID == ownerID, consent.collectionID == collectionID else { return false }
+            guard let data = try db.rows("SELECT claimed_at FROM deliveries WHERE id=? AND consent_revision=?", [.text(intent.claimKey), .text(String(intent.consentRevision))]).first?.first ?? nil,
+                  let text = String(data: data, encoding: .utf8) else { return false }
+            let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard let claimedAt = formatter.date(from: text) else { throw VaultError.storage }
+            let now = clock(), age = now.timeIntervalSince(claimedAt)
+            guard age >= 0, age <= ReminderPolicy.snapshotMaximumAge,
+                  floor(now.timeIntervalSince1970 / 60) == floor(claimedAt.timeIntervalSince1970 / 60) else { return false }
+            return try !db.rows("SELECT id FROM records WHERE state='saved' LIMIT 1").isEmpty
         }
     }
 }

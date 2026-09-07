@@ -134,4 +134,79 @@ final class ProofVaultTests: XCTestCase {
         _ = try v.edit(id: saved.id, revision: saved.revision, fields: saved.fields)
         XCTAssertThrowsError(try v.readMedia(token: t, collectionID: collection, id: saved.id, revision: saved.revision))
     }
+    func testResumePreservesExplicitApprovalTime() throws {
+        var now = Date()
+        let v = try vault(now: { now }), s = try source(v, trusted: true)
+        let paused = try v.pauseSource(id: s.id, revision: s.revision)
+        now = now.addingTimeInterval(3600)
+        let resumed = try v.updateSourceGrant(id: s.id, revision: paused.revision, configuration: s.configuration, paused: false)
+        XCTAssertEqual(resumed.approvedAt, s.approvedAt); XCTAssertNotEqual(resumed.revision, s.revision)
+        _ = try v.ingest(sourceGrantID: s.id, revision: resumed.revision, inputs: [input()])
+        XCTAssertEqual(try v.list(state: .saved)[0].approval?.approvedAt, s.approvedAt)
+        var config = resumed.configuration; config.tags = ["explicit-new-owner-tag"]
+        let changed = try v.updateSourceGrant(id: s.id, revision: resumed.revision, configuration: config, paused: false)
+        XCTAssertNotEqual(changed.approvedAt, s.approvedAt)
+    }
+    private func consent(_ v: ProofVault) -> ReminderConsent {
+        ReminderConsent(ownerID: v.ownerID, collectionID: collection, revision: 1, enabled: true, paused: false,
+            timeZone: "UTC", scheduledMinute: 720, quietHours: nil, cooldownMinutes: 60)
+    }
+    func testReminderClaimConsumedAcrossRestartAndRevision() throws {
+        var now = ISO8601DateFormatter().date(from: "2026-09-07T12:00:10Z")!
+        var v: ProofVault? = try vault(now: { now })
+        var i = input(); i.fields.category = "creativity"; _ = try v!.saveManual(i)
+        let c = try v!.setReminderConsent(consent(v!), expectedRevision: nil)
+        XCTAssertEqual(try v!.claimReminder(permission: .denied, observedAt: now, expectedRevision: c.revision), .skip(.permission))
+        let first = try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: c.revision)
+        guard case .notify(let intent) = first else { return XCTFail("Expected generic eligible reminder") }
+        XCTAssertEqual(intent.body, "Open Proof Gallery when you choose.")
+        XCTAssertTrue(try v!.isReminderClaimCurrent(intent))
+        XCTAssertEqual(try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: c.revision), .skip(.claimed))
+        // Simulate process loss before an OS receipt; the claim remains consumed.
+        v = nil; v = try vault(now: { now })
+        XCTAssertEqual(try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: c.revision), .skip(.claimed))
+        var paused = c; paused.paused = true
+        let p = try v!.setReminderConsent(paused, expectedRevision: c.revision)
+        XCTAssertFalse(try v!.isReminderClaimCurrent(intent))
+        XCTAssertThrowsError(try v!.setReminderConsent(c, expectedRevision: c.revision))
+        let resumed = try v!.setReminderConsent(c, expectedRevision: p.revision)
+        XCTAssertEqual(try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: resumed.revision), .skip(.cooldown))
+        now = now.addingTimeInterval(24 * 3600)
+        guard case .notify = try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: resumed.revision) else { return XCTFail("Next day's request should be eligible") }
+        try v!.clear()
+        XCTAssertNil(try v!.reminderConsent()); XCTAssertEqual(try v!.reminderLedger().claimedKeys.count, 2)
+        let reset = try v!.setReminderConsent(c, expectedRevision: nil)
+        XCTAssertGreaterThan(reset.revision, resumed.revision)
+        XCTAssertEqual(try v!.claimReminder(permission: .granted, observedAt: now, expectedRevision: reset.revision), .skip(.empty))
+    }
+    func testReminderLiveDeleteStalePermissionAndOwnerMismatch() throws {
+        let now = ISO8601DateFormatter().date(from: "2026-09-07T12:00:40Z")!, v = try vault(now: { now })
+        var i = input(); i.fields.category = "creativity"
+        let saved = try v.saveManual(i), c = try v.setReminderConsent(consent(v), expectedRevision: nil)
+        XCTAssertEqual(try v.claimReminder(permission: .granted, observedAt: now.addingTimeInterval(-31), expectedRevision: c.revision), .skip(.stale))
+        guard case .notify(let intent) = try v.claimReminder(permission: .granted, observedAt: now, expectedRevision: c.revision) else { return XCTFail("Expected eligible request") }
+        try v.delete(id: saved.id, revision: saved.revision)
+        XCTAssertFalse(try v.isReminderClaimCurrent(intent))
+        var other = c; other.ownerID = "another-owner"
+        XCTAssertThrowsError(try v.setReminderConsent(other, expectedRevision: c.revision))
+        XCTAssertEqual(try v.reminderLedger().claimedKeys.count, 1)
+    }
+    func testReminderRecheckDropsSuspendedFutureAndMinuteRolloverClaims() throws {
+        let claimed = ISO8601DateFormatter().date(from: "2026-09-07T12:00:40Z")!
+        var now = claimed
+        let v = try vault(now: { now }); var i = input(); i.fields.category = "creativity"
+        _ = try v.saveManual(i)
+        let c = try v.setReminderConsent(consent(v), expectedRevision: nil)
+        guard case .notify(let intent) = try v.claimReminder(permission: .granted, observedAt: now, expectedRevision: c.revision) else { return XCTFail("Expected request") }
+        XCTAssertTrue(try v.isReminderClaimCurrent(intent))
+        now = claimed.addingTimeInterval(20)
+        XCTAssertFalse(try v.isReminderClaimCurrent(intent)) // Next minute, even within 30s.
+        now = claimed.addingTimeInterval(3600)
+        XCTAssertFalse(try v.isReminderClaimCurrent(intent))
+        now = claimed.addingTimeInterval(-1)
+        XCTAssertFalse(try v.isReminderClaimCurrent(intent))
+        now = claimed.addingTimeInterval(24 * 3600)
+        XCTAssertFalse(try v.isReminderClaimCurrent(intent))
+        XCTAssertEqual(try v.reminderLedger().claimedKeys.count, 1)
+    }
 }
