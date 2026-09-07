@@ -57,7 +57,8 @@ async function discoverChromium() {
     const revisions = (await entries(cache)).filter(name => pattern.test(name)).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
     for (const revision of revisions) {
       const root = join(cache, revision);
-      for (const relative of [`chrome-mac-${suffix}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+      for (const relative of ['Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+        `chrome-mac-${suffix}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
         `chrome-mac-${suffix}/Chromium.app/Contents/MacOS/Chromium`, 'chrome-mac/Chromium.app/Contents/MacOS/Chromium']) {
         const binary = join(root, relative);
         if (!await executable(binary)) continue;

@@ -82,6 +82,18 @@ version ordering, agent-cache preference, skipping nonexecutable entries, actual
 The unchanged full local fallback flow then passed at
 `/private/tmp/proof-native-e2e-gizoLo/receipt.json`; hosted rerun is still required.
 
+The next hosted run `34093385975` at `e9d161ab` exposed a second layout detail:
+agent-browser 0.36.0 strips `chrome-<platform>/` while extracting the archive.
+Its pinned [installer source](https://github.com/vercel-labs/agent-browser/blob/v0.36.0/cli/src/install.rs)
+checks `Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`
+directly under `chrome-<version>`. Discovery now includes that exact relative
+path while retaining nested layouts and all executable/architecture checks.
+Synthetic validation now uses this stripped layout for the newest version and
+a nested older version, checking both plus fallback. The earlier synthetic test
+only modeled the nested layout, so it did not detect this installer mismatch.
+No Origin, CSP, sandbox or actual-flow requirement was changed; hosted execution
+of the corrected layout remains the outstanding gate.
+
 This receipt does not prove real Photos collection, installed/sandboxed helper
 execution, signed distribution, Windows/Android native support, or permissions in
 the user's browser. Packaged helper runtime verification is a separate
