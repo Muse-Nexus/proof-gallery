@@ -15,8 +15,9 @@ runtime before this test; the harness itself never installs dependencies.
 Optional `--chromium` and `--agent-browser` paths select existing cached binaries.
 Without overrides the harness discovers the pinned native agent executable in
 installed Bunx/Bun/npm caches, with no username or npm-cache hash hardcoded. It
-selects the newest cached macOS Chromium containing the host architecture according
-to `lipo`: arm64 or x86_64. Bun/npm cache environment overrides and an absolute
+selects the newest executable Chrome from `~/.agent-browser/browsers/chrome-<version>`
+first, then falls back to cached Playwright Chromium. Each automatic choice must
+contain the host architecture according to `lipo`: arm64 or x86_64. Bun/npm cache environment overrides and an absolute
 `PLAYWRIGHT_BROWSERS_PATH` are respected. Missing/nonexecutable runtimes fail with
 an explicit prerequisite message; raw package-cache files are never chmodded or
 installed. The selected paths and host architecture appear in the private receipt.
@@ -70,6 +71,16 @@ object method supplied an invalid receiver before any request. The web worker
 fixed it in `1cda2e4` and added a receiver-aware unit test. Earlier interrupted
 runs also exposed fixture-only CDP target-detach handling, selector quoting and
 the Pages `/offline` clean-route mapping; those are fixed in this harness.
+
+Hosted PR21 run `34092978507` at `68e3de43` passed the native companion job and
+the earlier browser/PWA steps, but failed native browser discovery because its
+installer used `/Users/runner/.agent-browser/browsers/chrome-152.0.7977.82`, not a
+Playwright cache. The fix adds that cache layout without changing installation,
+authorization or CI gates. Synthetic temporary cache validation passed numeric
+version ordering, agent-cache preference, skipping nonexecutable entries, actual
+`lipo` architecture validation, and fallback after removing the agent-cache links.
+The unchanged full local fallback flow then passed at
+`/private/tmp/proof-native-e2e-gizoLo/receipt.json`; hosted rerun is still required.
 
 This receipt does not prove real Photos collection, installed/sandboxed helper
 execution, signed distribution, Windows/Android native support, or permissions in

@@ -51,8 +51,10 @@ async function discoverChromium() {
   if (process.env.PLAYWRIGHT_BROWSERS_PATH?.startsWith('/')) caches.unshift(process.env.PLAYWRIGHT_BROWSERS_PATH);
   const suffix = process.arch === 'arm64' ? 'arm64' : 'x64';
   const hostArch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
-  for (const cache of caches) {
-    const revisions = (await entries(cache)).filter(name => /^chromium-\d+$/.test(name)).sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+  const layouts = [{ cache: join(runtimeHome, '.agent-browser/browsers'), pattern: /^chrome-\d+(?:\.\d+)*$/ },
+    ...caches.map(cache => ({ cache, pattern: /^chromium-\d+$/ }))];
+  for (const { cache, pattern } of layouts) {
+    const revisions = (await entries(cache)).filter(name => pattern.test(name)).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
     for (const revision of revisions) {
       const root = join(cache, revision);
       for (const relative of [`chrome-mac-${suffix}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
