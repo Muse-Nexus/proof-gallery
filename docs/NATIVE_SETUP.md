@@ -6,6 +6,13 @@ storage**. Startup opens an already configured store; a missing store fails
 closed rather than silently creating a replacement. No source access, login
 registration, notification prompt or network listener occurs at object creation.
 
+If app settings are lost but the collection remains, **Reconnect existing private
+storage…** offers an explicit confirmation before opening the known local store.
+The warning explains that previously approved sources, reminders and clients may
+resume. Cancel does nothing. Reconnection validates the existing identity/schema
+and never creates or replaces storage; see [recovery checks](NATIVE-RECONNECT-REVIEW.md).
+Initial schema and collection identity are committed in one transaction.
+
 Separate owner actions choose a source, background collection, trusted-source
 automatic saving, login startup, gallery access, assistant access and reminders.
 Trusted Photos confirmation includes the exact source ID/date floor and chosen

@@ -5,8 +5,10 @@ notarized**. The Windows/Android native product is not complete.
 
 Base: standalone main `2bdd75d0da1ebaf779a43b9e3553b82b1c053722` (PR20).
 Integration branch: `codex/proof-full-integration`.
-Tested implementation/tooling head: `92381714930d225d0220b8eb7d65f56968f748f8`.
-This receipt is a documentation-only follow-up to that head.
+Tested native implementation head: `90b2901`; final browser-harness head: `2e669e8`.
+PR: <https://github.com/Muse-Nexus/proof-gallery/pull/21>.
+Use the current PR head and hosted checks for the final integrated revision;
+the result boundaries and local artifacts are recorded below.
 
 ## Built
 
@@ -26,6 +28,10 @@ This receipt is a documentation-only follow-up to that head.
 - Encrypted native content backup/atomic empty-store restore; no active source,
   client, bookmark or reminder permissions imported. Browser/hosted collections
   remain distinct, with no silent migration or co-search.
+- Crash-atomic schema and identity setup, plus explicit owner-confirmed recovery
+  of an existing collection when app settings are lost. No silent replacement or
+  reconnection. Search excludes filenames from meaning matching and honors
+  requested seven-to-ten result limits without changing legacy callers.
 - Bundled independently sandboxed MCP helper, private assistant setup examples,
   major AGENTS/Claude instructions and repeatable browser/native CI checks.
 
@@ -63,7 +69,7 @@ No real Photos, email, messages or personal memories were scanned for fixtures.
 | Check | Local result |
 | --- | --- |
 | `bun run check` | Both TypeScript configurations, 344 tests in 33 files, production build passed |
-| `swift test --package-path companion/macos` | 95 tests: 93 passed, 2 explicitly gated probes skipped, zero failures |
+| `swift test --package-path companion/macos` | 110 tests: 108 passed, 2 explicitly gated probes skipped, zero failures |
 | Actual packaged `ProofMCPProcessTests` | Both passed against the ad-hoc sandboxed helper and real synthetic loopback store |
 | `bun scripts/e2e-native.mjs --dist /absolute/built/dist` | All 5 real browser-to-Swift/SQLite flow assertions passed; 390px overflow/quote checks and screenshots; no uncaught browser exceptions |
 | `bun run test:e2e` | All 8 grouped browser workflows passed: CRUD, exact evidence, review, trusted-folder controls, recovery and deletion suppression |
@@ -78,12 +84,22 @@ real on-device story-model probe. On-device semantic matching itself passed.
 The browser fixture passed when explicitly invoked by its harness. The build
 still reports a nonfatal JavaScript chunk-size warning (~537 kB minified).
 Hosted GitHub checks are a separate PR gate, not implied by these local results.
+All seven checks passed on `bac3251` before the final review corrections; the
+final current-head status is reported in the PR checks, not inferred from that
+earlier run.
 
-Latest combined native/browser artifacts: `/private/tmp/proof-native-e2e-f3SL3L/receipt.json`
+Review correction receipts: [search](NATIVE_SEARCH_REVIEW.md),
+[atomic initialization](VAULT-INITIALIZATION-REVIEW.md), and
+[explicit reconnection](NATIVE-RECONNECT-REVIEW.md). The latest native suite ran
+the on-device seven/ten-result checks, not just their literal fallback.
+
+Latest combined native/browser artifacts: `/private/tmp/proof-native-e2e-x3TLGc/receipt.json`
 and adjacent desktop/narrow screenshots. Browser regression artifacts:
-`proof-gallery-e2e-synthetic-m5WP6O`; PWA artifacts: `proof-pwa-synthetic-ny5D2z`.
+`proof-gallery-e2e-synthetic-iVoGti`; PWA artifacts: `proof-pwa-synthetic-jnHZan`.
 These temporary local receipts contain synthetic data, not shipped example data.
 The browser harness deletes its token file and temporary browser profile.
+The final harness waits for fresh controls and smooth scrolling to settle before
+a single click. It never retries a mutation; see [browser timing receipts](BROWSER-NATIVE-E2E.md).
 
 ## Remaining release and product gates
 
