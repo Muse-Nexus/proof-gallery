@@ -20,6 +20,7 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
         self.db = try VaultDatabase(directory: directory)
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         try transaction {
+            try db.initializeSchema()
             let rows = try db.rows("SELECT value FROM metadata WHERE key='collection'")
             if let data = rows.first?.first ?? nil {
                 guard String(data: data, encoding: .utf8) == collectionID else { throw VaultError.forbidden }

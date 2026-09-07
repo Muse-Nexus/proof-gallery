@@ -58,14 +58,6 @@ final class VaultDatabase {
             }
             try run("PRAGMA foreign_keys=ON"); try run("PRAGMA trusted_schema=OFF")
             try run("PRAGMA journal_mode=DELETE"); try run("PRAGMA synchronous=FULL"); try run("PRAGMA secure_delete=ON")
-            try run("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            try run("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, state TEXT NOT NULL, record BLOB NOT NULL, media BLOB)")
-            try run("CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, body BLOB NOT NULL)")
-            try run("CREATE TABLE IF NOT EXISTS handled (source_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(source_id,digest))")
-            try run("CREATE TABLE IF NOT EXISTS tombstones (digest TEXT PRIMARY KEY)")
-            try run("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, hash TEXT UNIQUE NOT NULL, body BLOB NOT NULL)")
-            try run("CREATE TABLE IF NOT EXISTS reminder (id TEXT PRIMARY KEY, revision TEXT NOT NULL, body BLOB NOT NULL)")
-            try run("CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, consent_revision TEXT NOT NULL, claimed_at TEXT NOT NULL)")
         } catch {
             if let db { sqlite3_close(db); self.db = nil }
             flock(lockFD, LOCK_UN); close(lockFD); lockFD = -1
@@ -73,6 +65,18 @@ final class VaultDatabase {
         }
     }
     deinit { if let db { sqlite3_close(db) }; if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD) } }
+    /// The caller must include identity metadata and these tables in one transaction.
+    func initializeSchema() throws {
+        guard sqlite3_get_autocommit(db) == 0 else { throw VaultError.storage }
+        try run("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        try run("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, state TEXT NOT NULL, record BLOB NOT NULL, media BLOB)")
+        try run("CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, body BLOB NOT NULL)")
+        try run("CREATE TABLE IF NOT EXISTS handled (source_id TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(source_id,digest))")
+        try run("CREATE TABLE IF NOT EXISTS tombstones (digest TEXT PRIMARY KEY)")
+        try run("CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, hash TEXT UNIQUE NOT NULL, body BLOB NOT NULL)")
+        try run("CREATE TABLE IF NOT EXISTS reminder (id TEXT PRIMARY KEY, revision TEXT NOT NULL, body BLOB NOT NULL)")
+        try run("CREATE TABLE IF NOT EXISTS deliveries (id TEXT PRIMARY KEY, consent_revision TEXT NOT NULL, claimed_at TEXT NOT NULL)")
+    }
     private func statement(_ sql: String, _ values: [SQLValue]) throws -> OpaquePointer {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else { throw VaultError.storage }
