@@ -59,6 +59,7 @@ function deferredPng(name = "synthetic-slow.png") {
 function fillRequiredFields() {
   fireEvent.change(screen.getByLabelText(/^Title$/), { target: { value: "Synthetic title" } });
   fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), { target: { value: "Synthetic evidence text" } });
+  fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "belonging" } });
 }
 
 function renderEditor({
@@ -218,7 +219,7 @@ describe("Proof image selection", () => {
       />,
     );
 
-    expect(screen.getByLabelText(/^Title$/)).toHaveFocus();
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).toHaveFocus();
 
     const dialog = screen.getByRole("dialog");
     const close = screen.getByRole("button", { name: "Close editor" });
@@ -264,6 +265,7 @@ describe("Proof image selection", () => {
     fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), {
       target: { value: "Synthetic evidence text" },
     });
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "belonging" } });
     fireEvent.input(screen.getByLabelText("Occurred date"), {
       target: { value: "2026-08-29" },
     });
@@ -309,6 +311,7 @@ describe("Proof image selection", () => {
     fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), {
       target: { value: "Synthetic evidence text" },
     });
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "belonging" } });
     fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
@@ -373,5 +376,195 @@ describe("Proof image selection", () => {
     expect(
       screen.queryByText(/Image validated and ready to save:/),
     ).not.toBeInTheDocument();
+  });
+});
+
+function captured(text = "", files: File[] = []) {
+  return { files, items: [], getData: (type: string) => type === "text/plain" ? text : "", dropEffect: "none" };
+}
+
+describe("note-first capture", () => {
+  it("starts on the note and keeps optional metadata collapsed for a new item", () => {
+    renderEditor();
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).toHaveFocus();
+    expect(screen.getByText("Date, source & other details").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
+    expect(screen.getByLabelText(/^Source type$/)).toHaveValue("other");
+  });
+
+  it("keeps opened metadata visible across field changes, and supports closing it", () => {
+    renderEditor();
+    const summary = screen.getByText("Date, source & other details");
+    const details = summary.closest("details")!;
+    fireEvent.click(summary);
+    expect(details).toHaveAttribute("open");
+    fireEvent.input(screen.getByLabelText("Occurred date"), { target: { value: "2026-09-01" } });
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "creativity" } });
+    fireEvent.change(screen.getByLabelText(/^Source type$/), { target: { value: "message" } });
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByLabelText(/^Source type$/)).toHaveValue("message");
+    fireEvent.click(summary);
+    expect(details).not.toHaveAttribute("open");
+  });
+
+  it("suggests visible organization from a note without changing its literal words or unknown source", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    const quote = "  Hiking with my sister.\nCried.  ";
+    fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), { target: { value: quote } });
+    expect(screen.getByLabelText(/^Title$/)).toHaveValue("Hiking with my sister. Cried.");
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("belonging");
+    expect(screen.getByText(/Category cue: “sister”/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].input).toMatchObject({ evidenceText: quote, occurredOn: null, source: null, sourceType: "other", person: null, project: null });
+  });
+
+  it("never overwrites manually edited fields or re-adds removed tags as a note changes", () => {
+    renderEditor();
+    const note = screen.getByLabelText(/Exact quote or evidence/i);
+    fireEvent.change(note, { target: { value: "Hiking with my sister." } });
+    fireEvent.change(screen.getByLabelText(/^Title$/), { target: { value: "My own title" } });
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "recovery" } });
+    fireEvent.change(screen.getByLabelText(/^Tags$/), { target: { value: "" } });
+    fireEvent.change(note, { target: { value: "My sister invited me to the family dinner." } });
+    expect(screen.getByLabelText(/^Title$/)).toHaveValue("My own title");
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("recovery");
+    expect(screen.getByLabelText(/^Tags$/)).toHaveValue("");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use word-based organization suggestions" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use word-based organization suggestions" }));
+    expect(screen.getByLabelText(/^Tags$/)).toHaveValue("");
+  });
+
+  it("does not supply a category for conflicting or negated word cues", () => {
+    renderEditor();
+    const note = screen.getByLabelText(/Exact quote or evidence/i);
+    fireEvent.change(note, { target: { value: "I never finished that drawing." } });
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
+    fireEvent.change(note, { target: { value: "I finished a drawing with my sister." } });
+    expect(screen.getByLabelText(/^Category$/)).toHaveValue("");
+  });
+
+  it("opens all existing edit metadata and preserves it even when suggestions are enabled", async () => {
+    const item = proofItem();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ item, onSave });
+    expect(screen.getByText("Date, source & other details").closest("details")).toHaveAttribute("open");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Use word-based organization suggestions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].input).toEqual({ title: item.title, evidenceText: item.evidenceText, category: item.category, tags: item.tags, occurredOn: item.occurredOn, source: item.source, sourceType: item.sourceType, person: item.person, project: item.project });
+  });
+
+  it("appends pasted plain text only in the capture area and never fetches pasted URLs", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    fillRequiredFields();
+    const note = screen.getByLabelText(/Exact quote or evidence/i);
+    fireEvent.paste(note, { clipboardData: captured("Not intercepted") });
+    expect(note).toHaveValue("Synthetic evidence text"); // Native text-field paste is left to the browser.
+    fireEvent.paste(screen.getByRole("group", { name: "Paste or drop evidence" }), { clipboardData: captured("  Exact quote\nhttps://example.test/private.png  ") });
+    expect(note).toHaveValue("Synthetic evidence text\n\n  Exact quote\nhttps://example.test/private.png  ");
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onSave.mock.calls[0][0].input).toMatchObject({ source: null, sourceType: "other", occurredOn: null });
+  });
+
+  it("validates pasted images and blocks save until they are checked", async () => {
+    const selected = deferredPng();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    fillRequiredFields();
+    fireEvent.paste(screen.getByRole("group", { name: "Paste or drop evidence" }), { clipboardData: captured("", [selected.file]) });
+    expect(screen.getByRole("button", { name: "Checking attachment…" })).toBeDisabled();
+    await act(async () => selected.finish());
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].image).toBe(selected.file);
+  });
+
+  it.each(["close", "unmount"])("ignores a pasted attachment after %s", async route => {
+    const selected = deferredPng();
+    const onClose = vi.fn();
+    const { unmount } = render(<ProofEditor item={null} busy={false} onClose={onClose} onSave={async () => undefined} />);
+    fireEvent.paste(screen.getByRole("group", { name: "Paste or drop evidence" }), { clipboardData: captured("", [selected.file]) });
+    if (route === "close") {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onClose).toHaveBeenCalledOnce();
+    } else unmount();
+    await act(async () => selected.finish());
+    expect(screen.queryByText(/validated and ready to save/)).not.toBeInTheDocument();
+  });
+
+  it("rejects excess capture text without truncating the note or replacing the selected attachment", async () => {
+    const file = validPng("kept.png");
+    renderEditor();
+    fillRequiredFields();
+    const capture = screen.getByRole("group", { name: "Paste or drop evidence" });
+    fireEvent.drop(capture, { dataTransfer: captured("", [file]) });
+    await screen.findByText(file.name);
+    fireEvent.paste(capture, { clipboardData: captured("x".repeat(20_000), [validPng("not-selected.png")]) });
+    expect(screen.getByRole("alert")).toHaveTextContent("Your current note is unchanged");
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).toHaveValue("Synthetic evidence text");
+    expect(screen.getByText(file.name)).toBeInTheDocument();
+    expect(screen.queryByText("not-selected.png")).not.toBeInTheDocument();
+  });
+
+  it("keeps the latest file when a dropped image beats a previous slow paste", async () => {
+    const earlier = deferredPng();
+    const latest = validPng("dropped.png");
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor({ onSave });
+    fillRequiredFields();
+    const capture = screen.getByRole("group", { name: "Paste or drop evidence" });
+    fireEvent.paste(capture, { clipboardData: captured("", [earlier.file]) });
+    fireEvent.drop(capture, { dataTransfer: captured("", [latest]) });
+    await screen.findByText(latest.name);
+    await act(async () => earlier.finish());
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].image).toBe(latest);
+  });
+
+  it("rejects unsafe media and multiple files without silently accepting a selection", async () => {
+    renderEditor();
+    const capture = screen.getByRole("group", { name: "Paste or drop evidence" });
+    fireEvent.drop(capture, { dataTransfer: captured("", [validPng("a.png"), validPng("b.png")]) });
+    expect(screen.getByRole("alert")).toHaveTextContent("one attachment");
+    fireEvent.drop(capture, { dataTransfer: captured("", [new File(["<svg/>"], "bad.svg", { type: "image/svg+xml" })]) });
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("JPEG, PNG, WebP, or GIF"));
+    expect(screen.queryByText(/validated and ready/)).not.toBeInTheDocument();
+  });
+
+  it("retains local image-only save with a literal filename title and an owner-chosen category", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ProofEditor item={null} busy={false} allowLocalMedia onClose={() => undefined} onSave={onSave} />);
+    const file = validPng("synthetic-2026.png");
+    fireEvent.drop(screen.getByRole("group", { name: "Paste or drop evidence" }), { dataTransfer: captured("", [file]) });
+    await screen.findByText(file.name);
+    expect(screen.getByLabelText(/^Title$/)).toHaveValue(file.name);
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).not.toBeRequired();
+    fireEvent.change(screen.getByLabelText(/^Category$/), { target: { value: "creativity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].input).toMatchObject({ title: file.name, evidenceText: "", category: "creativity", occurredOn: null, source: null, sourceType: "other" });
+  });
+
+  it("does not accept paste/drop changes during an in-flight save", async () => {
+    let finish!: () => void;
+    const onSave = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    renderEditor({ onSave });
+    fillRequiredFields();
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    const capture = screen.getByRole("group", { name: "Paste or drop evidence" });
+    expect(capture).toHaveAttribute("aria-disabled", "true");
+    expect(capture).toHaveAttribute("tabindex", "-1");
+    fireEvent.paste(capture, { clipboardData: captured("Late change") });
+    fireEvent.drop(capture, { dataTransfer: captured("", [validPng("late.png")]) });
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).toHaveValue("Synthetic evidence text");
+    await act(async () => finish());
+    expect(screen.queryByText("late.png")).not.toBeInTheDocument();
   });
 });

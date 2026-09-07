@@ -21,6 +21,8 @@ saved-Proof retrieval remains user-initiated. Read docs/AUTOMATIC_SOURCES.md.
 Recent Photos does not require Favorites. Optional on-device OCR and metadata
 are review cues only, held in native memory and excluded from v1 exports. Never
 turn machine-read text into an exact quote or infer love, identity, or worth.
+An explicitly edited/copied OCR draft must retain an unverified label and show
+the system-clipboard-sync warning. No automatic copy or export-schema shortcut.
 iCloud download consent is a separate off-by-default, one-batch option, reset
 on Pause/completion. It is not permission to upload images or use cloud AI.
 Never use real personal evidence as development data or public content.
@@ -37,3 +39,7 @@ source IDs; code displays full original notes so negation/context cannot be
 clipped away. Disconnect/edit/delete cancels stale results. Default encrypted
 backups include pending media and saved draft notes, but do not encrypt the
 active browser database. Restore must remain atomic and fail on conflicts.
+Recovery parts restore independently, not as one oversized atomic library.
+Installed/offline access caches only public app assets and must not reload an
+active editor. It does not authorize closed-app collection, OS sharing, sync,
+notifications, or assistant access to local evidence. See docs/EVERYDAY_ACCESS.md.

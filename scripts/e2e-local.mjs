@@ -126,11 +126,13 @@ try {
   await hasText("Your local gallery is empty");
   await click("Add Proof");
   await fill("Title", title, '[role="dialog"]');
-  await fill("Exact quote or evidence", quote, '[role="dialog"]');
+  await fill(/^Exact quote or evidence/, quote, '[role="dialog"]');
   await snapshot('[role="dialog"]');
   await browser("upload", '[role="dialog"] input[type="file"]', image);
   await hasText("Media validated and ready to save");
   await snapshot('[role="dialog"]');
+  // Native summary is a disclosure, omitted from this CLI's interactive button refs.
+  await browser("click", '[role="dialog"] .editor-details summary');
   // agent-browser 0.36.0 cannot reliably fill Chromium's segmented date widget.
   // Exercise the real input and React events, never app state or storage APIs.
   await browser("eval", `(() => { const input = document.querySelector('[role="dialog"] input[type="date"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '2026-08-30'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); return input.value; })()`);
@@ -310,11 +312,51 @@ try {
   await hasText(laterName);
   passed("Trusted Pause survives reload, explicit Resume collects new media, and Forget survives reload without deleting saved evidence");
 
+  await click("Add Proof");
+  const pastedNote = "SYNTHETIC pasted note: saw this tree on a walk. https://example.invalid/not-a-source";
+  await browser("click", '[role="dialog"] .editor-capture');
+  // Synthetic clipboard/drop events exercise rendered intake without reading or
+  // replacing the user's system clipboard. Native OS handoff remains a device check.
+  await browser("eval", `(() => { const transfer = new DataTransfer(); transfer.setData('text/plain', ${JSON.stringify(pastedNote)}); document.querySelector('[role="dialog"] .editor-capture').dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true })); return true; })()`);
+  assert.equal((await browser("eval", "document.querySelector('[role=dialog] textarea')?.value")).result, pastedNote);
+  const imageBase64 = (await readFile(image)).toString("base64");
+  await browser("eval", `(() => { const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob(${JSON.stringify(imageBase64)}), c => c.charCodeAt(0))], 'SYNTHETIC-drop.png', { type: 'image/png' })); document.querySelector('[role="dialog"] .editor-capture').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true })); return true; })()`);
+  await hasText("Media validated and ready to save");
+  const captureTitle = "SYNTHETIC · Captured without a date";
+  await fill("Title", captureTitle, '[role="dialog"]');
+  await select("Category", "creativity", '[role="dialog"]');
+  await click("Save Proof", '[role="dialog"]');
+  await hasText(captureTitle);
+  await select("Order", "recently_added");
+  assert.equal((await browser("eval", "document.querySelector('.gallery-grid .proof-card h2')?.textContent")).result, captureTitle);
+  assert((await browser("get", "text", ".gallery-grid .proof-card:first-child")).text.includes("MISSING"), "Capture must not invent a date or source from pasted content");
+  passed("Focused synthetic paste/drop preserves literal note and attachment; Recently added finds undated Proof without inventing dates");
+
+  await menu("Back up");
+  await browser("check", await reference("checkbox", "Download smaller recovery parts", ".backup-panel"));
+  await fill(/^Passphrase/, passphrase, ".backup-panel");
+  await fill("Repeat passphrase", passphrase, ".backup-panel");
+  const recoveryFile = join(downloads, "synthetic-recovery-part.proof");
+  await browser("download", await reference("button", "Download first recovery part", ".backup-panel"), recoveryFile);
+  await hasText("The encrypted recovery part was prepared for download.");
+  const recoveryBytes = await readFile(recoveryFile);
+  assert.equal(recoveryBytes.subarray(0, 8).toString(), "PROOFENC");
+  assert(!recoveryBytes.includes(Buffer.from(pastedNote)), "Recovery part must be encrypted");
+  await click("Close", ".backup-panel");
+  await menu("Restore");
+  await browser("upload", '.backup-panel input[type="file"]', recoveryFile);
+  await fill(/^Passphrase/, passphrase, ".backup-panel");
+  await actionWithDialog(() => click("Validate and restore", ".backup-panel"));
+  await hasText("Restored 0 saved Proof and 0 pending review items.");
+  await click("Close", ".backup-panel");
+  await hasText(captureTitle);
+  passed("Actual encrypted recovery-part download validates and restores as identical duplicates without changing saved Proof");
+
   await browser("screenshot", join(output, "completed.png"), "--full");
   const errors = await browser("errors");
   assert.equal(errors.errors?.length ?? 0, 0, `Browser errors: ${JSON.stringify(errors)}`);
   await writeFile(join(output, "receipt.json"), JSON.stringify({ target: target.href, session, receipts,
-    limitations: ["Native date input uses DOM setter plus real events", "Folder picker returns a genuine synthetic OPFS handle; not OS permission proof", "No native Photos/pairing proof", "Lexical search only; no external account or model"] }, null, 2));
+    limitations: ["Native date input uses DOM setter plus real events", "Clipboard/drop use synthetic DOM events, not the system clipboard or native OS share", "Folder picker returns a genuine synthetic OPFS handle; not OS permission proof", "No native Photos/pairing proof", "Lexical search only; no external account or model"] }, null, 2));
   console.log(`Browser E2E passed. Synthetic-only receipt and artifacts: ${output}`);
 } catch (error) {
   if (opened) {

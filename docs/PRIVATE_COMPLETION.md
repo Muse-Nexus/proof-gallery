@@ -25,6 +25,57 @@ Distinct drafts are not silently deduplicated by image hash. Restoring old
 archives can resurrect deleted items because there are no deletion tombstones.
 Source metadata is not a provider-signed assertion of truth.
 
+### Optional OCR-to-note drafting on the Mac
+
+Detected text remains a machine-read, unverified excerpt. **Use text in a review
+note** is an explicit action that opens a temporary editable draft; it never
+pre-fills during scanning. **Copy review note** separately copies the full draft
+with an unverified-machine-read label. Check against the image, then paste it
+into the photo's short note in the gallery review inbox. Copying is not approval,
+source verification, or a save. The 2,000-character draft limit blocks copying
+oversized text rather than silently clipping context. Existing edits are not
+overwritten by reusing the OCR action.
+
+Drafts remain view-local and are excluded from v1 companion review files and
+pairing. Filtering/removing a photo or closing the app can discard a draft.
+The system clipboard can sync to other devices under the owner's OS settings;
+the UI discloses this before copying. No Photos permissions, collection scope,
+automatic OCR export, native background activity or AI uploads are added.
+
+### Capacity and legacy recovery
+
+The same saved-media/count limits now apply atomically to manual saves,
+attachment replacement, pending approval, trusted-folder saves, and restore.
+Concurrent tabs cannot separately pass a stale capacity check. An oversized
+legacy collection is never trimmed or compressed: note edits and non-growing
+or shrinking attachment edits still work, as does deletion. Growth beyond the
+limits fails without partial saved or pending changes. Aggregate storage status
+reports saved/pending media bytes and counts without creating previews. These
+are archive safety limits, not the browser's total available disk quota; long
+notes and source metadata also contribute to encoded archive size.
+
+**Recovery parts** provides an owner-triggered route for existing oversized
+data. A cursor first plans IDs/revisions and conservative byte sizes; it does
+not retain the full collection's text/media. Each part is then read and encoded
+separately, normally within 32 MiB encoded / 24 MiB media and 1,000 saved /
+100 pending items. A single large legacy metadata record remains whole, up to
+the existing 144 MiB archive ceiling. Records exceeding that ceiling fail
+explicitly; original data remains unchanged. The UI encrypts every part with
+the existing backup envelope before offering a download.
+
+Parts share an export ID and creation time in their filenames/status, not new
+fields inside the v3 payload. Completion requires every numbered part. Keep
+all parts and their passphrase together. A changed/deleted upcoming record or
+Cancel stops export without writing or deleting anything; earlier downloaded
+parts are incomplete and should not be treated as a complete archive.
+Every part is independently restorable and keeps pending evidence pending.
+There is **no atomic all-part restore** and the normal aggregate collection
+limits still apply: an oversized legacy archive may need parts restored in
+separate browser profiles/collections until a larger private vault exists.
+Never remove original evidence before verifying the downloaded recovery parts.
+Active source grants, file handles and processed-source hashes are never
+included or re-enabled by recovery.
+
 ## Optional same-Mac connection
 
 In the native companion, **Connect to Gallery on this Mac** pauses Photos and
@@ -58,6 +109,13 @@ are included. Apple English sentence embeddings are accessed serially. Limits:
 serialized request. Return up to six matches, retaining relevance order and
 literal source/date display. Unsupported language/model or size fails clearly;
 the existing lexical search remains available, never a hidden cloud fallback.
+
+Local lexical recall also matches the exact historical folder label from a fully
+validated trusted-source receipt. The shared `getTrustedSourceContext` helper
+exposes only that source label for optional local companion matching. A folder
+label is not a person identification, event date, quote, or interpretation of
+the photo. No user note or source field is rewritten to create search context;
+invalid or incomplete receipts contribute no hidden source context.
 
 Optional reading selection requires macOS 26+, eligible hardware, and available
 Apple Intelligence. One on-device model selects up to three IDs among at most six

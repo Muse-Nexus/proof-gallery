@@ -1,5 +1,6 @@
 import { LOCAL_PROOF_OWNER_ID } from "./local-proof-store";
 import type { ProofItem } from "./proof";
+import { getTrustedSourceContext } from "./source-context";
 
 export type CompanionSession = { port: number; token: string; expiresAt: number; semantic: boolean; story: boolean };
 export type StoryExcerpt = { sourceID: string; exactExcerpt: string };
@@ -54,7 +55,7 @@ export const receiveCompanionReview = (session: CompanionSession, signal?: Abort
 
 function sourcesFor(items: readonly ProofItem[], story: boolean) {
   if (!items.length || items.length > (story ? 6 : 100) || new Set(items.map(item => item.id)).size !== items.length || items.some(item => item.userId !== LOCAL_PROOF_OWNER_ID || item.visibility !== "personal")) throw new Error("Select only saved local Proof (up to 6 for a story, or filter to 100 for matching).");
-  const sources = items.map(item => ({ id: item.id, revision: item.updatedAt, text: story ? item.evidenceText : [item.title, item.evidenceText, item.category, item.tags.join(" "), item.person, item.project].filter(Boolean).join("\n") }));
+  const sources = items.map(item => ({ id: item.id, revision: item.updatedAt, text: story ? item.evidenceText : [item.title, item.evidenceText, item.category, item.tags.join(" "), item.person, item.project, item.source, getTrustedSourceContext(item.provenance)].filter(Boolean).join("\n") }));
   if (sources.some(source => !source.text || source.text.length > 4000) || sources.reduce((sum, source) => sum + source.text.length, 0) > (story ? 6000 : 120_000)) throw new Error("These notes exceed the on-device context. Choose fewer or shorter notes; nothing was sent.");
   return sources;
 }

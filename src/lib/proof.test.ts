@@ -95,6 +95,13 @@ describe("Proof domain", () => {
       "newer",
     ]);
   });
+  it("offers recently added without inventing occurred dates for undated evidence", () => {
+    const dated = item({ id: "dated", occurredOn: "2026-01-01" });
+    const undated = item({ id: "new-addition", occurredOn: null, createdAt: "2026-09-06T00:00:00.000Z" });
+    expect(sortProofItems([dated, undated], "recently_added").map(row => row.id)).toEqual(["new-addition", "dated"]);
+    expect(sortProofItems([dated, undated], "newest")[0].id).toBe("dated");
+    expect(undated.occurredOn).toBeNull();
+  });
 });
 
 describe("private image boundary", () => {

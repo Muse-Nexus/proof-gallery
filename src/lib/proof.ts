@@ -28,7 +28,7 @@ export const PROOF_SOURCE_TYPES = [
 
 export type ProofCategory = (typeof PROOF_CATEGORIES)[number]["value"];
 export type ProofSourceType = (typeof PROOF_SOURCE_TYPES)[number]["value"];
-export type ProofSort = "newest" | "relevance";
+export type ProofSort = "newest" | "recently_added" | "relevance";
 
 export interface ProofItem {
   id: string;
@@ -153,6 +153,10 @@ export function sortProofItems(
   sort: ProofSort,
 ): ProofItem[] {
   return [...items].sort((left, right) => {
+    // Added time is collection history, never a substitute for the event date.
+    if (sort === "recently_added") {
+      return Date.parse(right.createdAt) - Date.parse(left.createdAt) || left.id.localeCompare(right.id);
+    }
     if (sort === "relevance") {
       const difference = (right.relevance ?? 0) - (left.relevance ?? 0);
       if (difference !== 0) return difference;

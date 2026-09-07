@@ -1832,3 +1832,24 @@ summary:focus-visible { outline: 3px solid #647e6a; outline-offset: 3px; border-
 .folder-source-mode { font-size: .85rem; line-height: 1.5; color: #365444; }
 .automatic-proof-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; margin: 1rem 0; padding: .8rem 1rem; border: 1px solid #c3d1c7; border-radius: 12px; background: #f4f8f2; }
 .automatic-proof-notice p { margin: 0; }
+.storage-usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0; }
+.storage-usage dt { color: var(--muted); font-size: .8rem; }
+.storage-usage dd { margin: .3rem 0 0; font-size: .85rem; }
+.storage-help, .capacity-warning { font-size: .8rem; }
+.capacity-warning { color: #754a1b; }
+.source-guide, .connection-status { margin-top: 1rem; padding: 1.1rem 1.3rem; border: 1px solid var(--line); border-radius: .8rem; background: var(--paper); }
+.source-guide summary { cursor: pointer; }
+.source-guide p, .connection-status p { max-width: 85ch; color: var(--muted); font-size: .85rem; line-height: 1.65; }
+.connection-status h3 { margin: 0; font-size: 1rem; font-weight: 450; }
+.install-proof { margin: .7rem 0 1rem; padding: .8rem 1rem; border: 1px solid var(--line); border-radius: .75rem; color: var(--muted); font-size: .8rem; line-height: 1.65; }
+.install-proof summary { cursor: pointer; color: var(--ink); }
+.install-proof p, .install-proof ul { max-width: 85ch; }
+.editor-details { grid-column: 1 / -1; border-block: 1px solid var(--line); padding: 1rem 0; }
+.editor-details summary { cursor: pointer; font-size: .88rem; }
+.editor-detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding-top: 1rem; }
+.editor-capture { display: grid; gap: .35rem; grid-column: 1 / -1; padding: 1rem; border: 1px dashed #a2b4a0; border-radius: .65rem; background: #f7f9f3; font-size: .85rem; line-height: 1.55; }
+.editor-capture:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
+.editor-note-suggestions { grid-column: 1 / -1; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+@media (max-width: 640px) {
+  .editor-detail-fields, .storage-usage { grid-template-columns: 1fr; }
+}

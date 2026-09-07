@@ -6,6 +6,7 @@ dist/
 .DS_Store
 coverage/
 companion/macos/.build/
+companion/macos/.build-*/
 *.proof-inbox.json
 proof-gallery-backup-*.json
 *.proof

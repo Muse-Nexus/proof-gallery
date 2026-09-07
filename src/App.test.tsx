@@ -46,6 +46,9 @@ vi.mock("./components/FolderSource", () => ({
     </section>
   ),
 }));
+vi.mock("./components/LocalStorageStatus", () => ({
+  LocalStorageStatus: ({ disabled, onBackup }: { disabled: boolean; onBackup: () => void }) => <details><summary>Stored in this browser. Keep a backup.</summary><button disabled={disabled} onClick={onBackup}>Create an encrypted backup</button></details>,
+}));
 
 function localItem(): ProofItem {
   return {
@@ -481,12 +484,14 @@ describe("standalone local storage boundary", () => {
 
   it("keeps an active search intact when automatic Proof arrives until explicitly opened", async () => {
     const item = localItem();
-    const added = { ...item, id: "33333333-3333-4333-8333-333333333333", title: "Synthetic auto-saved photo" };
+    const added = { ...item, id: "33333333-3333-4333-8333-333333333333", title: "Synthetic auto-saved photo", category: "creativity" as const, tags: [], occurredOn: null, createdAt: "2026-09-06T00:00:00.000Z" };
     vi.mocked(listLocalProofItems).mockResolvedValue([item]);
     vi.mocked(searchLocalProofItems).mockResolvedValue({ items: [item], semanticDegraded: true });
     window.localStorage.setItem("proof-gallery-storage-mode", "local");
     render(<App />);
     await screen.findByText("1 saved Proof item");
+    fireEvent.change(screen.getByLabelText("Category"), { target: { value: "shipped" } });
+    fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "synthetic" } });
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "synthetic" } });
     fireEvent.click(screen.getByRole("button", { name: "Search Proof" }));
     await screen.findByText("1 search result");
@@ -503,6 +508,10 @@ describe("standalone local storage boundary", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show newly saved Proof" }));
     expect(await screen.findByText(added.title)).toBeInTheDocument();
     expect(screen.getByText("2 saved Proof items")).toBeInTheDocument();
+    expect(screen.getByLabelText("Order")).toHaveValue("recently_added");
+    expect(screen.getByLabelText("Category")).toHaveValue("");
+    expect(screen.getByLabelText("Tag")).toHaveValue("");
+    expect(screen.getAllByRole("heading", { level: 2 }).filter(heading => heading.closest(".proof-card"))[0]).toHaveTextContent(added.title);
     expect(screen.queryByRole("button", { name: "Show newly saved Proof" })).not.toBeInTheDocument();
   });
 

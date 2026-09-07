@@ -15,6 +15,8 @@ import { ProofStory } from "./components/ProofStory";
 import { BackupPanel } from "./components/BackupPanel";
 import { CompanionPanel } from "./components/CompanionPanel";
 import { FolderSource } from "./components/FolderSource";
+import { LocalStorageStatus } from "./components/LocalStorageStatus";
+import { InstallProof } from "./components/InstallProof";
 import { semanticCompanionSearch, type CompanionSession } from "./lib/local-companion";
 import {
   createProofItem,
@@ -45,6 +47,7 @@ import {
   type ProofFilters,
   type ProofItem,
   type ProofItemInput,
+  type ProofSort,
 } from "./lib/proof";
 import { getSupabase, isConfigured } from "./lib/supabase";
 
@@ -270,6 +273,7 @@ function Gallery({
   const [searchResults, setSearchResults] = useState<ProofItem[] | null>(null);
   const [filters, setFilters] = useState<ProofFilters>(EMPTY_PROOF_FILTERS);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ProofSort>("newest");
   const [semanticDegraded, setSemanticDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -286,6 +290,7 @@ function Gallery({
   const [useSemantic, setUseSemantic] = useState(false);
   const [view, setView] = useState<"gallery" | "sources">("gallery");
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [storageRevision, setStorageRevision] = useState(0);
   const [automaticChanges, setAutomaticChanges] = useState(false);
   const automaticGeneration = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -303,6 +308,7 @@ function Gallery({
   async function refreshPendingCount() {
     try { setPendingCount(await countLocalProofCandidates()); }
     catch { setPendingCount(null); }
+    finally { setStorageRevision(value => value + 1); }
   }
 
   async function reload() {
@@ -375,7 +381,7 @@ function Gallery({
   );
   const visible = sortProofItems(
     searchResults ?? filtered,
-    searchResults ? "relevance" : "newest",
+    searchResults ? "relevance" : sort,
   );
   const hasFilters = Boolean(filters.category || filters.tag);
   const hasSearch = searchResults !== null;
@@ -390,6 +396,8 @@ function Gallery({
     setShowMediaInbox(false);
     if (next === "gallery" && automaticChanges) {
       clearSearch();
+      clearFilters();
+      setSort("recently_added");
       void reload();
     }
   }
@@ -398,6 +406,8 @@ function Gallery({
     if (editingBlocked || editor || backupMode || storySeedId || showMediaInbox) return;
     setView("gallery");
     clearSearch();
+    clearFilters();
+    setSort("recently_added");
     void reload();
   }
 
@@ -684,12 +694,9 @@ function Gallery({
       </div>
 
       {isLocal && (
-        <details className="local-boundary">
-          <summary>Stored in this browser. Keep a backup.</summary>
-          <p>Local to this browser profile, not account-isolated, synced, or encrypted by Proof Gallery. Clearing site data, using private browsing, or losing this profile can erase it. Encrypted backups include saved Proof, pending media, and saved notes.</p>
-          <button className="text-button" type="button" disabled={editingBlocked} onClick={() => openBackup("export")}>Create an encrypted backup</button>
-        </details>
+        <LocalStorageStatus disabled={editingBlocked} revision={storageRevision} onBackup={() => openBackup("export")} />
       )}
+      {isLocal && <InstallProof disabled={editingBlocked || Boolean(editor || backupMode || storySeedId) || showMediaInbox} />}
 
       {isLocal && backupMode && <BackupPanel key={backupMode} mode={backupMode} blocked={mediaDirty || busy} onBusyChange={setBusy} onClose={() => setBackupMode(null)} onRestored={async () => { setNotice(null); clearSearch(); await reload(); }} />}
       {isLocal && automaticChanges && <div className="automatic-proof-notice" role="status">
@@ -720,6 +727,17 @@ function Gallery({
           </section>
         </div>
         {showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setView("gallery"); setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); void reload(); }} />}
+        <details className="source-guide">
+          <summary>A simple drop folder for Drive, Dropbox, or your device</summary>
+          <p>Create a dedicated folder such as “For Proof” in a folder already synced by your own Drive or Dropbox app. Choose that one folder above. Only its top-level media is read; this does not connect your whole account.</p>
+          <p>Review is the default. You can separately confirm automatic saving for this exact folder. Keep this page open and visible for checks; installing the web app does not make collection run while it is closed.</p>
+          <p>The sync provider may hold the source files under its own privacy settings. Your gallery stays in this browser; folder sync is not a gallery backup or cross-device gallery sync.</p>
+        </details>
+        <aside className="connection-status" aria-label="Assistant connection status">
+          <h3>Who can access this gallery?</h3>
+          <p>{companion ? "This Mac is temporarily paired for the actions you request. Pairing expires after five minutes." : "No assistant is connected to this browser’s saved Proof."}</p>
+          <p>ChorOS and its MCP tools use a separate private collection. Signing into an assistant does not give it this local gallery. Nothing here is sent to a cloud model.</p>
+        </aside>
         <p className="sources-footnote">Review is a place to choose, not an assessment of your life. Photos do not tell us who someone is or what a moment means to you.</p>
       </section>}
       {isLocal && showMediaInbox && <MediaInbox savedProof={items} busy={busy} onBusyChange={setBusy} onDirtyStateChange={setMediaDirty} onClose={() => { setShowMediaInbox(false); void refreshPendingCount(); }} onSaved={async () => { clearSearch(); await reload(); }} />}
@@ -816,6 +834,14 @@ function Gallery({
             Clear filters
           </button>
         )}
+        <label>
+          Order
+          <select value={hasSearch ? "relevance" : sort} disabled={busy || hasSearch} onChange={event => setSort(event.target.value as ProofSort)}>
+            <option value="newest">Newest event first</option>
+            <option value="recently_added">Recently added</option>
+            {hasSearch && <option value="relevance">Relevance</option>}
+          </select>
+        </label>
       </section>
 
       {!loading && (
@@ -827,7 +853,7 @@ function Gallery({
                 ? `${visible.length} of ${items.length} saved Proof ${items.length === 1 ? "item" : "items"}`
                 : `${items.length} saved Proof ${items.length === 1 ? "item" : "items"}`}
           </span>
-          <span>{hasSearch ? "Sorted by relevance" : "Newest first"}</span>
+          <span>{hasSearch ? "Sorted by relevance" : sort === "recently_added" ? "Recently added · event dates unchanged" : "Newest event first"}</span>
         </div>
       )}
 

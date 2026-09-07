@@ -56,6 +56,9 @@ over a five-minute same-Mac pairing. Neither route approves Proof or syncs accou
 - Optional Vision OCR is on-device, off the UI thread, bounded, cancellable, and
   unverified. Keep it and metadata cues in native memory only; the v1 export
   must not gain machine-read quotes, inferred categories, identity, or meaning.
+  The owner may explicitly create/edit a transient OCR draft and copy it with
+  its unverified label after a visible system-clipboard-sync warning. Never
+  copy automatically, imply verified quotation, or add that draft to exports.
   No OCR result is not negative evidence. Public PhotoKit captions/People labels
   are unavailable here; never invent them or read the Photos database privately.
 - Keep candidates private and out of search until explicit review. The separate
@@ -94,7 +97,14 @@ over a five-minute same-Mac pairing. Neither route approves Proof or syncs accou
   encrypt active browser storage. Include pending media and saved draft notes.
   Restore validates first, then writes both stores atomically; conflicts abort,
   exact duplicates skip, pending stays pending. Never persist passphrases/tokens.
+  Enforce aggregate capacity atomically without deleting oversized legacy data.
+  Recovery parts are independently encrypted/restorable, not an all-parts atomic
+  restore or a promise that an oversized library fits one browser collection.
   A copy from ChorOS is a separate copy, not a migration or live integration.
+- Installed/offline web access caches public app-shell assets only, never Proof,
+  API responses, signed URLs, or uploads. Never force-reload an active editor.
+  Installation is not permission for scanning, sharing, sync, or notifications;
+  do not advertise an OS share target or closed-app collector that is not built.
 - Use deterministic validation, storage, approval, filtering, and deletion. Use
   one model only if needed; no mandatory orchestration or automatic vision calls.
 

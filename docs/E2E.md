@@ -1,5 +1,28 @@
 # Synthetic browser end-to-end checks
 
+## Installable app and offline lifecycle
+
+The additional built-preview suite runs with the same pinned CLI and isolation:
+
+```sh
+bun run build
+bun run test:e2e:pwa
+```
+
+It starts its own loopback-only server for already-built public files, refuses
+private dotenv files, and uses a fresh ephemeral browser/config without inherited
+credential variables. It checks the real install offer when provided by Chromium,
+decoded 192/512 icons, offline saved-attachment rendering, pending isolation,
+mobile layout, and the exact public-only cache allowlist. A synthetic version
+bump of the generated worker verifies that an update waits through an unsaved
+editor, activates after its old client closes, and preserves unrelated caches
+and the local gallery. No operating-system app is installed by the test.
+Screenshots and a synthetic-only receipt remain in its printed temporary path.
+The browser CI job runs both suites. OS installation on Android/iOS/Mac/Windows
+still needs per-device checks; there is deliberately no OS share target.
+
+## Core gallery workflows
+
 Run from a clean checkout with Bun installed:
 
 ```sh
@@ -60,6 +83,10 @@ personal media into its fixtures.
   handle, save media, and verify deleted bytes do not reappear after reload.
 - Persist Pause across reload, resume when asked, and Forget without deleting
   evidence already saved.
+- Paste a literal synthetic note and drop an image into the focused capture
+  area; find the undated saved item with Recently added, without invented dates.
+- Download an encrypted recovery part and restore its identical entries without
+  changing existing saved evidence.
 
 ## Honest boundaries
 
@@ -68,6 +95,11 @@ The runner sets that native input through its standard DOM value setter and
 dispatches `input`/`change` events; it then verifies the actual saved date after
 reload. It does not call application setters or write storage. The operating
 system date-picker interaction remains a separate manual check.
+
+Clipboard and drop coverage dispatches standard synthetic DOM events through
+the focused intake area. It never reads or replaces the system clipboard and
+does not establish native OS share-sheet support. Component tests separately
+cover validation races, oversized transfers, and cancellation.
 
 The folder picker is replaced only inside the ephemeral test page with a function
 returning a genuine browser-owned Origin Private File System directory handle.
