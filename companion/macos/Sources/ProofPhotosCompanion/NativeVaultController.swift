@@ -5,6 +5,7 @@ import CompanionVault
 /// Native owner-only composition. Initializing this object does not create
 /// storage, listen, prompt, scan, register a service or send a notification.
 @MainActor final class NativeVaultController: ObservableObject {
+    @Published var reconnectConfirmation = false
     @Published private(set) var ready = false
     @Published private(set) var message = "Set up private storage to keep evidence after closing the app."
     @Published private(set) var clients: [VaultClientGrant] = []
@@ -20,6 +21,7 @@ import CompanionVault
     @Published var quietEnd = 8 * 60
     @Published var timeZone = TimeZone.current.identifier
     private(set) var vault: ProofVault?
+    private var reconnectRequested = false
     private var bridge: VaultBridge?
     private var reminders: NativeReminderAdapter?
     private let preferences: UserDefaults
@@ -56,6 +58,23 @@ import CompanionVault
             preferences.set(id, forKey: "proof.native.collection.v1")
             try attach(authority)
         } catch { message = "Could not create private storage safely. No sources or connections were granted." }
+    }
+    func requestReconnectFromOwnerAction() {
+        guard vault == nil else { return }
+        reconnectRequested = true
+        reconnectConfirmation = true
+    }
+    func cancelReconnect() {
+        reconnectRequested = false; reconnectConfirmation = false
+    }
+    func reconnectFromOwnerConfirmation() {
+        guard vault == nil, reconnectRequested else { return }
+        cancelReconnect()
+        do {
+            let authority = try ProofVault.reconnectExisting(directory: directory(createParent: false))
+            try attach(authority)
+            preferences.set(authority.collectionID, forKey: "proof.native.collection.v1")
+        } catch { message = "Existing private storage could not reconnect safely. Nothing was created, replaced or connected." }
     }
     private func attach(_ authority: ProofVault) throws {
         let consent = try authority.reminderConsent()

@@ -9,7 +9,7 @@ enum SQLValue { case text(String), blob(Data), integer(Int64), null }
 final class VaultDatabase {
     private var db: OpaquePointer?
     private var lockFD: Int32 = -1
-    init(directory: URL) throws {
+    init(directory: URL, existingOnly: Bool = false) throws {
         guard directory.isFileURL, directory.path.hasPrefix("/"), !directory.pathComponents.contains("..") else { throw VaultError.unsafePath }
         var ancestor = URL(fileURLWithPath: "/", isDirectory: true)
         for component in directory.pathComponents.dropFirst() {
@@ -20,13 +20,14 @@ final class VaultDatabase {
             } else if ancestor.path != directory.path || errno != ENOENT { throw VaultError.unsafePath }
         }
         if !FileManager.default.fileExists(atPath: directory.path) {
+            guard !existingOnly else { throw VaultError.unavailable }
             guard mkdir(directory.path, 0o700) == 0 else { throw VaultError.unsafePath }
         }
         var info = stat()
         guard lstat(directory.path, &info) == 0, info.st_uid == getuid(), info.st_mode & 0o777 == 0o700 else { throw VaultError.unsafePath }
         func safeFile(_ name: String) throws -> Int32 {
             let path = directory.appendingPathComponent(name).path
-            let fd = open(path, O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
+            let fd = open(path, O_RDWR | (existingOnly ? 0 : O_CREAT) | O_NOFOLLOW | O_CLOEXEC, 0o600)
             guard fd >= 0 else { throw VaultError.unsafePath }
             var s = stat()
             guard fstat(fd, &s) == 0, s.st_uid == getuid(), s.st_mode & S_IFMT == S_IFREG,
@@ -51,13 +52,30 @@ final class VaultDatabase {
             sqlite3_busy_timeout(db, 1000)
             let tables = try rows("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
                 .compactMap { row in row.first.flatMap { $0 }.flatMap { String(data: $0, encoding: .utf8) } }
+            guard !existingOnly || !tables.isEmpty else { throw VaultError.unavailable }
             if !tables.isEmpty {
                 guard Set(tables) == Set(["metadata", "records", "sources", "handled", "tombstones", "clients", "reminder", "deliveries"]),
                       let version = try rows("SELECT value FROM metadata WHERE key='version'").first?.first ?? nil,
                       String(data: version, encoding: .utf8) == "1" else { throw VaultError.unavailable }
             }
+            if existingOnly {
+                let columns = [
+                    "metadata": ["key", "value"], "records": ["id", "state", "record", "media"],
+                    "sources": ["id", "body"], "handled": ["source_id", "digest"],
+                    "tombstones": ["digest"], "clients": ["id", "hash", "body"],
+                    "reminder": ["id", "revision", "body"], "deliveries": ["id", "consent_revision", "claimed_at"]
+                ]
+                for (table, expected) in columns {
+                    // Identifiers come only from the fixed native schema above.
+                    let actual = try rows("PRAGMA table_info(\(table))").compactMap { row in
+                        row[1].flatMap { String(data: $0, encoding: .utf8) }
+                    }
+                    guard actual == expected else { throw VaultError.unavailable }
+                }
+            }
             try run("PRAGMA foreign_keys=ON"); try run("PRAGMA trusted_schema=OFF")
-            try run("PRAGMA journal_mode=DELETE"); try run("PRAGMA synchronous=FULL"); try run("PRAGMA secure_delete=ON")
+            if !existingOnly { try run("PRAGMA journal_mode=DELETE") }
+            try run("PRAGMA synchronous=FULL"); try run("PRAGMA secure_delete=ON")
         } catch {
             if let db { sqlite3_close(db); self.db = nil }
             flock(lockFD, LOCK_UN); close(lockFD); lockFD = -1

@@ -33,6 +33,22 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
             else { try db.run("INSERT INTO metadata VALUES ('version','1')") }
         }
     }
+    /// Owner-confirmed recovery at the known native location. Never creates storage
+    /// or attaches services; validates identity using the same locked connection.
+    public static func reconnectExisting(directory: URL, ownerID: String = "local-mac-owner",
+                                         now: @escaping () -> Date = Date.init) throws -> ProofVault {
+        try VaultValidation.text(ownerID, max: 200, empty: false)
+        let db = try VaultDatabase(directory: directory, existingOnly: true)
+        guard let collection = try db.rows("SELECT value FROM metadata WHERE key='collection'").first?.first ?? nil,
+              let collectionID = String(data: collection, encoding: .utf8), UUID(uuidString: collectionID) != nil,
+              let owner = try db.rows("SELECT value FROM metadata WHERE key='owner'").first?.first ?? nil,
+              String(data: owner, encoding: .utf8) == ownerID else { throw VaultError.forbidden }
+        return ProofVault(database: db, collectionID: collectionID, ownerID: ownerID, now: now)
+    }
+    private init(database: VaultDatabase, collectionID: String, ownerID: String, now: @escaping () -> Date) {
+        self.db = database; self.collectionID = collectionID; self.ownerID = ownerID; self.clock = now
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    }
     private func serialized<T>(_ operation: () throws -> T) rethrows -> T {
         lock.lock(); defer { lock.unlock() }; return try operation()
     }

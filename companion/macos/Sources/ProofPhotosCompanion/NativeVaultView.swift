@@ -13,6 +13,8 @@ struct NativeVaultView: View {
                 if !storage.ready {
                     Button("Set up private storage", action: storage.setUpFromOwnerAction)
                     Text("Creates a private local collection. It does not connect Photos, choose a folder, enable login/background behavior or grant an assistant access.").font(.caption)
+                    Button("Reconnect existing private storage…", action: storage.requestReconnectFromOwnerAction)
+                    Text("Use this if existing storage lost its connection to the app. You will confirm before prior permissions resume.").font(.caption)
                 } else {
                     Text("Granted connections and enabled reminders keep the companion in the menu bar when you close its window. Quit stops them until next launch. This never grants a source permission to collect in the background.").font(.caption)
                     if storage.port == 0 { Button("Start private connection service", action: storage.prepareConnections) }
@@ -64,6 +66,10 @@ struct NativeVaultView: View {
                 Text("Never use proof to invalidate pain, create guilt, demand optimism, or argue that the user should feel better. Use it only to restore evidence that depression has hidden.").font(.caption).foregroundStyle(.secondary)
             }.padding(.top, 8)
         }
+        .confirmationDialog("Reconnect existing private storage?", isPresented: $storage.reconnectConfirmation) {
+            Button("Reconnect and resume prior permissions", action: storage.reconnectFromOwnerConfirmation)
+            Button("Cancel", role: .cancel, action: storage.cancelReconnect)
+        } message: { Text("This reconnects the existing private collection at this app's storage location. Previously approved sources, enabled reminders and client connections may resume. It creates no new permissions. Cancel to leave it disconnected.") }
         .confirmationDialog("Allow saved Proof text in your chosen assistant?", isPresented: $confirmAssistant) {
             Button("Create a 30-day read-only permission", action: storage.issueAssistantFromOwnerAction)
         } message: { Text("Only requested saved notes, dates and provenance; no pending items, photos, source access or editing. A cloud assistant may send the requested evidence to its provider. You can revoke access here.") }
