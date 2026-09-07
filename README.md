@@ -72,6 +72,10 @@ repository, its issues, screenshots, examples, or release bundles.
 - **Browser-local mode:** items and original media stay in this profile. Active
   storage is not encrypted by Proof Gallery, authenticated, or synced. Other
   users of the profile may access it. Clearing site data can erase it.
+- **Native collection (unreleased):** a separate private Mac database, accessed
+  only through explicitly granted gallery/assistant connections. Active storage
+  is not app-encrypted; OS permissions do not block software running as you.
+  A cloud assistant can disclose the saved text you request to its provider.
 - **Encrypted backups:** include saved Proof, pending media, and saved review
   notes. Encryption protects the downloaded archive, not active browser storage.
   Older plaintext backups remain readable. Test recovery before relying on it.

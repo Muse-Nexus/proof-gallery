@@ -1,6 +1,49 @@
 # Privacy and threat model
 
-## Optional Mac Photos companion
+## Durable native collection (unreleased full-version work)
+
+The new native collection is a third, separately chosen authority, not a sync
+layer over browser or hosted data. Explicit setup creates a private local SQLite
+store. Directory/file permissions are 0700/0600; the active database is not
+app-encrypted and cannot protect against other software running as the same OS
+user. A single companion holds its file lock. Browser and assistant clients
+access this store through scoped, expiring, revocable loopback grants, never by
+opening its database. The browser pairing code stays in memory, not browser
+storage. Connecting does not automatically fetch evidence; hiding the page
+redacts evidence and unsaved drafts, and revocation/expiry erases client state.
+
+Sources, background collection, exact-source automatic saving, login startup,
+assistant access and reminders each require separate owner actions. A selected
+Photos scope or immediate-files-only folder defaults to pending review. Explicit
+trusted-source approval may save new validated images with owner-chosen category
+and tags; it does not approve existing candidates or infer emotional meaning.
+Originals are never edited. Background collection runs only while the authorized
+companion process is running; shutdown/sleep does not collect missed work.
+
+Gallery grants permit review/CRUD/media for 24 hours. Assistant grants permit
+saved text only for 30 days. Search is restricted to saved Proof in this native
+collection; on-device semantic matching uses the newest 100 filtered items and
+labels that window and fallback. A cloud assistant may send requested text to
+its provider: local storage is not a promise that the selected assistant runs
+locally. No media, source, approval or write authority follows from the MCP grant.
+Bytes another client already received or queued for transmission cannot be
+retracted by revocation or deletion.
+
+Native reminders require both explicit app consent and OS permission. They send
+only generic text, with quiet hours, cooldown and no missed-reminder replay;
+no evidence, person, count or item ID appears in the OS notification. Turning
+them off is separate from stopping source collection or assistant access.
+
+Native passphrase-encrypted backups contain saved/pending evidence and literal
+receipts, not source bookmarks, client tokens, reminder settings or active
+permissions. Restore validates the whole archive into an empty, unconnected
+native collection. Browser backups use a different inner format; no silent
+conversion occurs. Native deletion tombstones prevent automatic source
+resurrection, but retained backups and original files remain separate copies.
+Deletion cannot promise forensic erasure from device snapshots or storage media.
+See [native setup and device gates](NATIVE_SETUP.md).
+
+## Legacy Mac Photos review/export flow
 
 The separate [Mac companion](COMPANION.md) can request a Photos grant and watch
 a user-selected Recent Photos/Favorites/album date scope only while active. Web permission
@@ -91,7 +134,8 @@ ChorOS automatically, and a manually authorized copy is separate, not synced.
 The public GitHub repository contains software, not anyone's evidence. There is
 no Muse Nexus hosted evidence service in this repository.
 
-Proof Gallery has two deliberately separate storage modes:
+The browser gallery has two deliberately separate storage modes, alongside the
+explicit native connection described above:
 
 - **Local mode** stores evidence and image bytes in IndexedDB for one browser
   origin and profile. It requires no account.
@@ -101,7 +145,7 @@ Proof Gallery has two deliberately separate storage modes:
 Choosing a mode is explicit. A failed login, missing configuration, network
 error, or unavailable provider does not silently move evidence into local
 storage. Proof Gallery does not automatically sync, migrate, co-search, or
-merge the two collections.
+merge these collections.
 
 ## Protected assets
 
@@ -209,7 +253,8 @@ The explicitly started folder source checks selected files while the visible
 gallery is open. It does not collect after the browser closes or automatically
 surface evidence during distress. The review inbox does not grant connector or library
 access. The optional native companion has its own bounded Photos source and
-active-session observer, not general account mining. Any further collector must
+active-session observer, or separately consented native background source,
+not general account mining. Any further collector must
 preserve the distinction between review and explicitly trusted-source saves,
 and add explicit source permissions, revocation,
 and protected credential handling.

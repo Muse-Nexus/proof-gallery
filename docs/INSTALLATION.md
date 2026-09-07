@@ -1,5 +1,11 @@
 # Install Proof for easy access
 
+This section describes the browser app. The unreleased Mac companion adds a
+separate durable native collection and explicitly approved background behavior;
+see [native setup](NATIVE_SETUP.md). Its source build is not yet a public
+notarized installer. There is no Windows/Android native background collector in
+this version; browser access and media picking do not establish that capability.
+
 Installation adds an app icon. It does not grant access to Photos, messages,
 folders, or accounts, and it does not add background collection. You still use
 the explicit local picker, paste/drop capture, or a separately confirmed folder.
