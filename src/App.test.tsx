@@ -102,6 +102,8 @@ describe("standalone local storage boundary", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("AI-generated decorative image")).toBeInTheDocument();
     expect(screen.getAllByText("Not saved Proof")).toHaveLength(2);
+    expect(screen.getByRole("group", { name: "Visual truth boundary" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Project links" })).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View the code" }),
     ).toHaveAttribute("href", "https://github.com/Muse-Nexus/proof-gallery");
@@ -129,6 +131,7 @@ describe("standalone local storage boundary", () => {
     expect(window.localStorage.getItem("proof-gallery-storage-mode")).toBe(
       "local",
     );
+    expect(screen.getByRole("group", { name: "Search ideas" })).toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

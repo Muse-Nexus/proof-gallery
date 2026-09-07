@@ -118,10 +118,15 @@ Read [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the
 
 ```sh
 bun run check
+bun run test:e2e
 deno fmt --check supabase/functions
 deno check --frozen supabase/functions/proof-search/index.ts
 deno check --frozen supabase/functions/embed-proof/index.ts
 ```
+
+The [synthetic browser suite](docs/E2E.md) covers add/edit/search, private review,
+encrypted recovery, and trusted-folder consent in an isolated local browser.
+Read its setup and device-verification limits before running it.
 
 Native changes also need `swift test` and the checks in
 [the companion guide](docs/COMPANION.md). Database changes need the isolated

@@ -68,6 +68,24 @@ it("retains a visible unsaved draft when another tab changes the candidate", asy
   fireEvent.click(screen.getByRole("button", { name: "Discard detail edits" }));
   await waitFor(() => expect(screen.getByLabelText("Title")).toHaveValue("Synthetic remote title"));
 });
+it("preserves selection and a dirty note across unrelated source and automatic notices", async () => {
+  render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
+  await screen.findByText("Pending review · not saved Proof");
+  expect(screen.getByText(/This one-time picker does not keep folder access/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select all 1" }));
+  const notify = vi.mocked(subscribeToLocalProofChanges).mock.calls[0][0];
+  await act(async () => { notify("source"); notify("automatic"); });
+  expect(listLocalProofCandidates).toHaveBeenCalledOnce();
+  expect(screen.getByRole("checkbox", { name: "Select all 1" })).toBeChecked();
+  expect(screen.getByRole("button", { name: "Save selected (1)" })).toBeEnabled();
+  fireEvent.change(screen.getByLabelText(/Your short note/), { target: { value: "Synthetic draft remains here." } });
+  await act(async () => { notify("automatic"); notify("source"); });
+  expect(listLocalProofCandidates).toHaveBeenCalledOnce();
+  expect(screen.getByRole("checkbox", { name: "Select all 1" })).toBeChecked();
+  expect(screen.getByLabelText(/Your short note/)).toHaveValue("Synthetic draft remains here.");
+  expect(screen.queryByText(/Review has changes to load/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save selected (1)" })).toBeDisabled();
+});
 it("preserves dirty details when importing after a deferred remote revision", async () => {
   render(<MediaInbox busy={false} onBusyChange={vi.fn()} onSaved={vi.fn()} onClose={vi.fn()} />);
   await screen.findByText("Pending review · not saved Proof");

@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -38,12 +39,26 @@ function proofItem(overrides: Partial<ProofItem> = {}): ProofItem {
   };
 }
 
-function validPng(): File {
+function validPng(name = "synthetic.png"): File {
   return new File(
     [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
-    "synthetic.png",
+    name,
     { type: "image/png" },
   );
+}
+
+function deferredPng(name = "synthetic-slow.png") {
+  let resolve!: (bytes: ArrayBuffer) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<ArrayBuffer>((done, fail) => { resolve = done; reject = fail; });
+  const file = validPng(name);
+  vi.spyOn(file, "slice").mockReturnValueOnce({ arrayBuffer: () => promise } as Blob);
+  return { file, reject, finish: () => resolve(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]).buffer) };
+}
+
+function fillRequiredFields() {
+  fireEvent.change(screen.getByLabelText(/^Title$/), { target: { value: "Synthetic title" } });
+  fireEvent.change(screen.getByLabelText(/Exact quote or evidence/i), { target: { value: "Synthetic evidence text" } });
 }
 
 function renderEditor({
@@ -74,6 +89,93 @@ afterEach(() => {
 });
 
 describe("Proof image selection", () => {
+  it("blocks save until the current attachment finishes validation", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const selected = deferredPng();
+    renderEditor({ onSave });
+    fillRequiredFields();
+    fireEvent.change(screen.getByLabelText(/Image or screenshot/i), { target: { files: [selected.file] } });
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Checking attachment…" })).toBeDisabled();
+    fireEvent.submit(screen.getByRole("button", { name: "Checking attachment…" }).closest("form")!);
+    expect(onSave).not.toHaveBeenCalled();
+    await act(async () => selected.finish());
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].image).toBe(selected.file);
+  });
+
+  it("keeps the newest validated file when an earlier choice finishes last", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const earlier = deferredPng();
+    const latest = validPng("synthetic-latest.png");
+    renderEditor({ onSave });
+    fillRequiredFields();
+    const picker = screen.getByLabelText(/Image or screenshot/i);
+    fireEvent.change(picker, { target: { files: [earlier.file] } });
+    fireEvent.change(picker, { target: { files: [latest] } });
+    await screen.findByText(latest.name);
+    await act(async () => earlier.finish());
+    expect(screen.queryByText(earlier.file.name)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].image).toBe(latest);
+  });
+
+  it("does not clear a newer file or its picker when an obsolete check rejects", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const earlier = deferredPng();
+    const latest = validPng("synthetic-latest.png");
+    renderEditor({ onSave });
+    fillRequiredFields();
+    const picker = screen.getByLabelText(/Image or screenshot/i);
+    fireEvent.change(picker, { target: { files: [earlier.file] } });
+    fireEvent.change(picker, { target: { files: [latest] } });
+    await screen.findByText(latest.name);
+    const reset = vi.fn();
+    Object.defineProperty(picker, "value", { configurable: true, get: () => "synthetic-latest.png", set: reset });
+    await act(async () => earlier.reject(new Error("Obsolete validation error")));
+    expect(reset).not.toHaveBeenCalled();
+    expect(screen.queryByText("Obsolete validation error")).not.toBeInTheDocument();
+    expect(screen.getByText(latest.name)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Proof" }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+    expect(onSave.mock.calls[0][0].image).toBe(latest);
+  });
+
+  it.each(["close", "unmount"])("ignores attachment validation after %s", async route => {
+    const selected = deferredPng();
+    const onClose = vi.fn();
+    const onSave = vi.fn();
+    const { unmount } = render(<ProofEditor item={null} busy={false} onClose={onClose} onSave={onSave} />);
+    fireEvent.change(screen.getByLabelText(/Image or screenshot/i), { target: { files: [selected.file] } });
+    if (route === "close") {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+      expect(onClose).toHaveBeenCalledOnce();
+    } else unmount();
+    await act(async () => selected.finish());
+    expect(screen.queryByText(/validated and ready to save/)).not.toBeInTheDocument();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("locks editable fields and rejects duplicate submission while saving", async () => {
+    let finish!: () => void;
+    const onSave = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    renderEditor({ onSave });
+    fillRequiredFields();
+    const form = screen.getByRole("button", { name: "Save Proof" }).closest("form")!;
+    fireEvent.submit(form);
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    expect(screen.getByLabelText(/^Title$/)).toBeDisabled();
+    expect(screen.getByLabelText(/Image or screenshot/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Exact quote or evidence/i)).toBeDisabled();
+    fireEvent.submit(form);
+    expect(onSave).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    expect(screen.getByLabelText(/^Title$/)).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save Proof" })).toBeEnabled();
+  });
+
   it.each(["Escape", "backdrop", "close button", "Cancel"])(
     "prevents dismissal through %s while saving and restores it afterward",
     (route) => {
