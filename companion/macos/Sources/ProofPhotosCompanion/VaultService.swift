@@ -156,28 +156,30 @@ final class VaultService: @unchecked Sendable {
         default: throw VaultError.forbidden
         }
     }
+    /// Meaning comes only from owner-visible text fields, never a media filename.
+    /// Original filenames remain in the unchanged receipt returned to the owner.
+    static func indexText(_ record: VaultRecord) -> String {
+        ([record.fields.title, record.fields.evidenceText, record.fields.person ?? "", record.fields.project ?? "", record.fields.source ?? ""] + record.fields.tags).joined(separator: "\n")
+    }
     private func search(_ request: VaultBridgeRequest, query: String, category: String?, tag: String?, limit: Int) async throws -> VaultPreparedResponse {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, query.utf8.count <= 500, (3...10).contains(limit) else { throw VaultError.invalid }
         let filtered = try authorized(request, scope: .savedText) { try filter(all(.saved), category: category, tag: tag) }
         let snapshot = Array(filtered.prefix(100))
         var ranked = [String](), matching = "local-literal-text"
-        func indexText(_ record: VaultRecord) -> String {
-            ([record.fields.title, record.fields.evidenceText, record.fields.person ?? "", record.fields.project ?? "", record.fields.source ?? "", record.receipt?.originalFilename ?? ""] + record.fields.tags).joined(separator: "\n")
-        }
         if !snapshot.isEmpty {
             // Bound ranking text only; returned evidence remains complete.
-            let sources = snapshot.map { ["id": $0.id, "revision": $0.revision, "text": String(indexText($0).prefix(1100))] }
+            let sources = snapshot.map { ["id": $0.id, "revision": $0.revision, "text": String(Self.indexText($0).prefix(1100))] }
             do {
                 let data = try JSONSerialization.data(withJSONObject: ["query": query, "sources": sources])
                 let input = try JSONDecoder().decode(EvidenceRequest.self, from: data)
-                ranked = try await intelligence.search(input).ids
+                ranked = try await intelligence.search(input, limit: limit).ids
                 matching = "local-semantic"
             } catch {
                 try Task.checkCancellation()
                 let stop = Set(["show", "me", "proof", "evidence", "of", "for", "the", "a", "an", "i", "am", "is", "my", "that", "to"])
                 let words = Set(query.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)).subtracting(stop)
                 ranked = snapshot.enumerated().compactMap { index, item -> (String, Int, Int)? in
-                    let text = indexText(item).lowercased()
+                    let text = Self.indexText(item).lowercased()
                     let score = words.filter { text.contains($0) }.count
                     return score > 0 ? (item.id, score, index) : nil
                 }.sorted { $0.1 == $1.1 ? $0.2 < $1.2 : $0.1 > $1.1 }.prefix(limit).map { $0.0 }

@@ -43,7 +43,10 @@ public actor EvidenceIntelligence {
               request.sources.allSatisfy({ UUID(uuidString: $0.id) != nil && !$0.revision.isEmpty && !$0.text.isEmpty && $0.text.count <= 4000 }),
               request.sources.reduce(0, { $0 + $1.text.count }) <= (story ? 6000 : 120_000) else { throw BridgeError.invalidEvidence }
     }
-    public func search(_ request: EvidenceRequest) throws -> EvidenceResponse {
+    /// The internal native caller may request up to ten IDs; legacy callers keep six.
+    /// This argument is not part of the v1 request/response wire schema.
+    public func search(_ request: EvidenceRequest, limit: Int = 6) throws -> EvidenceResponse {
+        guard (1...10).contains(limit) else { throw BridgeError.invalidEvidence }
         try validate(request, story: false); try Task.checkCancellation()
         let recognizer = NLLanguageRecognizer(); recognizer.processString(request.query)
         guard recognizer.dominantLanguage == .english, let embedding, let query = embedding.vector(for: request.query) else { throw BridgeError.unavailable }
@@ -60,7 +63,7 @@ public actor EvidenceIntelligence {
         }
         guard ranked.count == request.sources.count else { throw BridgeError.unavailable }
         try Task.checkCancellation()
-        return EvidenceResponse(ids: ranked.sorted { $0.1 > $1.1 }.prefix(6).map(\.0), excerpts: [])
+        return EvidenceResponse(ids: ranked.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0), excerpts: [])
     }
     public func story(_ request: EvidenceRequest) async throws -> EvidenceResponse {
         try validate(request, story: true)
