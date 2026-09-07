@@ -158,7 +158,7 @@ function LocalStart({
             details you know. Later, find it again or read your saved moments
             together as a story, in your own words.
           </p>
-          <div className="visual-truth-receipt" aria-label="Visual truth boundary">
+          <div className="visual-truth-receipt" role="group" aria-label="Visual truth boundary">
             <div>
               <span>Your gallery</span>
               <strong>Your photos, exact words, dates, and sources</strong>
@@ -226,7 +226,7 @@ function LocalStart({
             Read it, run it locally, self-host it, or help make it better. Your
             saved Proof never belongs in the public repository.
           </p>
-          <div className="open-source-links" aria-label="Project links">
+          <div className="open-source-links" role="group" aria-label="Project links">
             <a href="https://github.com/Muse-Nexus/proof-gallery" target="_blank" rel="noreferrer">Source code</a>
             <a href="https://github.com/Muse-Nexus/proof-gallery/blob/main/docs/PRIVACY.md" target="_blank" rel="noreferrer">Privacy model</a>
             <a href="https://github.com/Muse-Nexus/proof-gallery/blob/main/docs/SAFETY.md" target="_blank" rel="noreferrer">Safety constitution</a>
@@ -767,7 +767,7 @@ function Gallery({
             </button>
           )}
         </form>
-        {!query && <div className="search-starters" aria-label="Search ideas">
+        {!query && <div className="search-starters" role="group" aria-label="Search ideas">
           <span>Try a starting point</span>
           {["Times people valued my work", "Moments of connection", "Things I finished"].map(prompt => <button className="search-starter" key={prompt} type="button" disabled={busy} onClick={() => { setQuery(prompt); searchInput.current?.focus(); }}>{prompt}<span aria-hidden="true"> ↗</span></button>)}
         </div>}

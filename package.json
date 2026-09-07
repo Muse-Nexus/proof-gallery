@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
+    "test:e2e": "bun scripts/e2e-local.mjs",
     "test:integration:local": "bun tests/integration/proof-gallery.integration.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

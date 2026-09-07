@@ -56,20 +56,37 @@ export function ProofEditor({
   const [image, setImage] = useState<File | null>(null);
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validatingImage, setValidatingImage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const selectionGeneration = useRef(0);
+  const selectionPending = useRef(false);
+  const savePending = useRef(false);
+  const mounted = useRef(false);
   const dialogRef = useRef<HTMLElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const editingLocked = busy || saving;
 
   useEffect(() => {
+    mounted.current = true;
     const previouslyFocused =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
     titleInputRef.current?.focus();
-    return () => previouslyFocused?.focus();
+    return () => {
+      mounted.current = false;
+      selectionGeneration.current++;
+      selectionPending.current = false;
+      previouslyFocused?.focus();
+    };
   }, []);
 
   function closeEditor() {
-    if (!busy) onClose();
+    if (busy || savePending.current) return;
+    selectionGeneration.current++;
+    selectionPending.current = false;
+    setValidatingImage(false);
+    onClose();
   }
 
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -99,31 +116,49 @@ export function ProofEditor({
   }
 
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
+    if (busy || savePending.current) return;
+    const input = event.currentTarget;
+    const selected = input.files?.[0] ?? null;
+    const generation = ++selectionGeneration.current;
     setError(null);
+    setImage(null);
 
     if (!selected) {
-      setImage(null);
+      selectionPending.current = false;
+      setValidatingImage(false);
       return;
     }
 
+    selectionPending.current = true;
+    setValidatingImage(true);
+    const isCurrent = () => mounted.current && selectionGeneration.current === generation;
     try {
       await (allowLocalMedia ? validateLocalProofMedia(selected) : validateProofImage(selected));
+      if (!isCurrent()) return;
       setImage(selected);
       setRemoveExistingImage(false);
     } catch (selectionError) {
-      event.target.value = "";
+      if (!isCurrent()) return;
+      input.value = "";
       setImage(null);
       setError(
         selectionError instanceof Error
           ? selectionError.message
           : "The selected image could not be validated",
       );
+    } finally {
+      if (isCurrent()) {
+        selectionPending.current = false;
+        setValidatingImage(false);
+      }
     }
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy || savePending.current || selectionPending.current) return;
+    savePending.current = true;
+    setSaving(true);
     setError(null);
     try {
       await onSave({
@@ -142,7 +177,10 @@ export function ProofEditor({
         removeExistingImage,
       });
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Proof could not be saved");
+      if (mounted.current) setError(saveError instanceof Error ? saveError.message : "Proof could not be saved");
+    } finally {
+      savePending.current = false;
+      if (mounted.current) setSaving(false);
     }
   }
 
@@ -159,7 +197,7 @@ export function ProofEditor({
         className="editor-dialog"
         role="dialog"
         aria-modal="true"
-        aria-busy={busy}
+        aria-busy={editingLocked || validatingImage}
         aria-labelledby="editor-title"
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
@@ -169,14 +207,14 @@ export function ProofEditor({
             <span className="privacy-badge">{privacyLabel}</span>
             <h2 id="editor-title">{item ? "Edit Proof" : "Add Proof"}</h2>
           </div>
-          <button type="button" className="icon-button" onClick={closeEditor} disabled={busy} aria-label="Close editor">
+          <button type="button" className="icon-button" onClick={closeEditor} disabled={editingLocked} aria-label="Close editor">
             ×
           </button>
         </header>
         <form className="editor-form" onSubmit={submit}>
           <label>
             Title
-            <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required />
+            <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required disabled={editingLocked} />
           </label>
           <label className="full-width evidence-image-field">
             {allowLocalMedia ? "Evidence photo or clip" : "Evidence image or screenshot"} <span className="optional">optional · {allowLocalMedia ? "JPEG, PNG, WebP, GIF, MP4, or WebM" : "JPEG, PNG, WebP, or GIF"} · 10 MB max</span>
@@ -186,10 +224,12 @@ export function ProofEditor({
             </span>
             <input
               type="file"
+              disabled={editingLocked}
               accept={allowLocalMedia ? LOCAL_MEDIA_ACCEPT : "image/jpeg,image/png,image/webp,image/gif"}
               onChange={selectImage}
             />
           </label>
+          {validatingImage && <p className="selection-status full-width" role="status">Checking attachment before saving… You can choose a different file or cancel.</p>}
           {image && (
             <p className="selection-status full-width" role="status">
               {allowLocalMedia ? "Media" : "Image"} validated and ready to save: <strong>{image.name}</strong>
@@ -207,6 +247,7 @@ export function ProofEditor({
                 <label className="checkbox-row">
                   <input
                     type="checkbox"
+                    disabled={editingLocked}
                     checked={removeExistingImage}
                     onChange={(event) => setRemoveExistingImage(event.target.checked)}
                   />
@@ -229,6 +270,7 @@ export function ProofEditor({
               <label className="checkbox-row">
                 <input
                   type="checkbox"
+                  disabled={editingLocked}
                   checked={removeExistingImage}
                   onChange={(event) => setRemoveExistingImage(event.target.checked)}
                 />
@@ -240,6 +282,7 @@ export function ProofEditor({
             Exact quote or evidence
             <textarea
               value={evidenceText}
+              disabled={editingLocked}
               onChange={(event) => setEvidenceText(event.target.value)}
               rows={5}
               maxLength={20_000}
@@ -250,6 +293,7 @@ export function ProofEditor({
             Occurred date
             <input
               type="date"
+              disabled={editingLocked}
               value={occurredOn}
               onInput={(event) => setOccurredOn(event.currentTarget.value)}
               onChange={(event) => setOccurredOn(event.currentTarget.value)}
@@ -257,7 +301,7 @@ export function ProofEditor({
           </label>
           <label>
             Category
-            <select value={category} onChange={(event) => setCategory(event.target.value as ProofCategory)}>
+            <select value={category} disabled={editingLocked} onChange={(event) => setCategory(event.target.value as ProofCategory)}>
               {PROOF_CATEGORIES.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
@@ -267,6 +311,7 @@ export function ProofEditor({
             Source type
             <select
               value={sourceType}
+              disabled={editingLocked}
               onChange={(event) => setSourceType(event.target.value as ProofSourceType)}
             >
               {PROOF_SOURCE_TYPES.map((option) => (
@@ -276,24 +321,24 @@ export function ProofEditor({
           </label>
           <label>
             Exact source detail <span className="optional">optional</span>
-            <input value={source} onChange={(event) => setSource(event.target.value)} maxLength={500} placeholder="Sender, publication, filename, event…" />
+            <input value={source} disabled={editingLocked} onChange={(event) => setSource(event.target.value)} maxLength={500} placeholder="Sender, publication, filename, event…" />
           </label>
           <label>
             Tags
-            <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="launch, family, client" />
+            <input value={tags} disabled={editingLocked} onChange={(event) => setTags(event.target.value)} placeholder="launch, family, client" />
           </label>
           <label>
             Person <span className="optional">optional</span>
-            <input value={person} onChange={(event) => setPerson(event.target.value)} maxLength={200} />
+            <input value={person} disabled={editingLocked} onChange={(event) => setPerson(event.target.value)} maxLength={200} />
           </label>
           <label>
             Project <span className="optional">optional</span>
-            <input value={project} onChange={(event) => setProject(event.target.value)} maxLength={200} />
+            <input value={project} disabled={editingLocked} onChange={(event) => setProject(event.target.value)} maxLength={200} />
           </label>
           {error && <p className="error-banner full-width">{error}</p>}
           <footer className="editor-actions full-width">
-            <button type="button" className="secondary-button" onClick={closeEditor} disabled={busy}>Cancel</button>
-            <button className="primary-button" disabled={busy}>{busy ? "Saving…" : "Save Proof"}</button>
+            <button type="button" className="secondary-button" onClick={closeEditor} disabled={editingLocked}>Cancel</button>
+            <button className="primary-button" disabled={editingLocked || validatingImage}>{editingLocked ? "Saving…" : validatingImage ? "Checking attachment…" : "Save Proof"}</button>
           </footer>
         </form>
       </section>

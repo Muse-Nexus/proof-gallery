@@ -14,6 +14,10 @@ Choose **Add Proof** for a note, exact message, or individual image. Keep the
 words as written. Add the date and source if known, and choose a category that
 helps you find it. Leave unknown details blank.
 
+The editor checks your selected attachment before enabling Save. Choosing a
+different file replaces that pending choice; canceling the editor stops it.
+While a save is running, fields stay locked so later edits cannot be lost.
+
 For a batch, open **Photos & media**. Choose photos, screenshots, or short clips
 on your Mac, PC, or phone. Each arrives in review. Write a short note if you
 want, such as “Saw this tree while hiking with my sister. Cried.” The note stays
