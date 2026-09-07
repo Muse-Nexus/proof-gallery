@@ -152,12 +152,33 @@ async function browser(...command) {
 }
 async function snapshot() { return browser('snapshot', '-i'); }
 async function ref(role, name) {
-  const state = await snapshot();
-  const visible = new Set(Array.from(state.snapshot.matchAll(/\bref=(e\d+)\b/g), m => m[1]));
-  const matches = Object.entries(state.refs ?? {}).filter(([id, entry]) => visible.has(id) && entry.role === role && entry.name === name);
-  assert.equal(matches.length, 1, `Expected one ${role} ${name}; found ${matches.length}. ${state.snapshot}`); return `@${matches[0][0]}`;
+  const deadline = Date.now() + 5000;
+  let state;
+  do {
+    if (fatal) throw fatal;
+    state = await snapshot();
+    const visible = new Set(Array.from(state.snapshot.matchAll(/\bref=(e\d+)\b/g), m => m[1]));
+    const matches = Object.entries(state.refs ?? {}).filter(([id, entry]) => visible.has(id) && entry.role === role && entry.name === name);
+    assert(matches.length < 2, `Ambiguous ${role} ${name}; found ${matches.length}. ${state.snapshot}`);
+    if (matches.length === 1) return `@${matches[0][0]}`;
+    await sleep(80);
+  } while (Date.now() < deadline);
+  throw new Error(`Timed out after 5000ms waiting for ${role} ${name}. Last fresh snapshot: ${state.snapshot}`);
 }
-async function click(name) { const id = await ref('button', name); await browser('scrollintoview', id); await browser('click', id); }
+async function click(name) {
+  const id = await ref('button', name);
+  await browser('scrollintoview', id);
+  // The pinned driver starts CSS smooth scrolling without waiting for it.
+  // Observe settling before dispatching exactly one click; never replay it.
+  let previous, stable = 0;
+  await until(async () => {
+    const position = (await browser('eval', 'JSON.stringify([window.scrollX, window.scrollY])')).result;
+    stable = position === previous ? stable + 1 : 0;
+    previous = position;
+    return stable >= 2;
+  }, `Scroll did not settle before clicking ${name}`, 5000);
+  await browser('click', await ref('button', name));
+}
 async function fill(name, value) { await browser('fill', await ref('textbox', name), value); }
 async function text() { return (await browser('get', 'text', 'body')).text; }
 async function hasText(value) { await until(async () => (await text()).includes(value), `Missing UI text: ${value}`); }

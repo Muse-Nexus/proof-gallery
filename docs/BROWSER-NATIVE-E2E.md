@@ -99,3 +99,22 @@ execution, signed distribution, Windows/Android native support, or permissions i
 the user's browser. Packaged helper runtime verification is a separate
 lead-owned receipt. Browser deletion, hidden-draft recovery and every
 cross-platform browser variant are outside this bounded flow's claims.
+
+At integration `90b2901`, `/private/tmp/proof-native-e2e-nf4m0Y` failed to find the
+connection-code textbox immediately after clicking Connect. Both later failure
+artifacts still showed the landing page, without browser exceptions, so a React
+render delay alone is not established. An unchanged rerun passed at
+`/private/tmp/proof-native-e2e-2Jq3qa/receipt.json`. The page uses smooth scrolling,
+and pinned agent-browser 0.36.0 `scroll_into_view` returns immediately after
+starting it; coordinate clicking can therefore race movement.
+
+The harness now observes window scroll position until two consecutive samples
+are unchanged before dispatching exactly one click. It then resolves controls
+from fresh snapshots for at most five seconds, rejecting ambiguity immediately
+and including the last snapshot on timeout. No mutation is replayed. This closes
+the observed timing weaknesses without claiming the original missed click was
+conclusively reproduced. Fault-injected validation covered delayed controls,
+absent-control timeouts, ambiguous controls, and moving scroll before one click.
+The actual updated full flow passed against integration `90b2901` and its dist at
+`/private/tmp/proof-native-e2e-ymmNpP/receipt.json`, including approval, media,
+editing and revocation. Production UI and security boundaries are unchanged.
