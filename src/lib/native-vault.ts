@@ -81,7 +81,7 @@ export class NativeVaultClient {
     const generation = this.generation;
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await this.fetcher(`http://127.0.0.1:${c.port}/v2/gallery/${path}`, {
+      const response = await this.fetcher.call(globalThis, `http://127.0.0.1:${c.port}/v2/gallery/${path}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${c.token}` },
         body: JSON.stringify(body), signal: controller.signal, credentials: 'omit', cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer',
       });

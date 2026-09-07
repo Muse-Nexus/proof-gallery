@@ -69,3 +69,13 @@ it('verifies attachment hash, length and MIME before returning bytes', async () 
   const client = new NativeVaultClient(code, fetcher); await client.info(); expect((await client.media(item)).size).toBe(8);
   await expect(client.media(item)).rejects.toThrow(NATIVE_ERROR);
 });
+it('calls browser fetch with the global receiver rather than the client instance', async () => {
+  const browserFetch = vi.fn(function (this: unknown) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    return Promise.resolve(response(info));
+  });
+  vi.stubGlobal('fetch', browserFetch);
+  const client = new NativeVaultClient(code);
+  await expect(client.info()).resolves.toMatchObject({ collectionID });
+  expect(browserFetch.mock.contexts).toEqual([globalThis]);
+});
