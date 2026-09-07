@@ -14,6 +14,7 @@ import CompanionCore
 @MainActor final class CompanionAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let model = PhotosModel()
     private var window: NSWindow?
+    private var statusItem: NSStatusItem?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu(); let appItem = NSMenuItem(); menu.addItem(appItem)
         let appMenu = NSMenu(); appItem.submenu = appMenu
@@ -25,8 +26,28 @@ import CompanionCore
         window.contentView = NSHostingView(rootView: CompanionView(model: model))
         window.center(); window.makeKeyAndOrderFront(nil); self.window = window
         NSApp.activate(ignoringOtherApps: true)
+        let status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        status.button?.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: "Proof Photos")
+        let statusMenu = NSMenu()
+        for (title, action) in [("Open Proof Photos", #selector(reopenWindow)), ("Pause collection", #selector(pauseCollection)), ("Quit Proof Photos", #selector(quitCompanion))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self; statusMenu.addItem(item)
+        }
+        status.menu = statusMenu; statusItem = status
+        model.restoreSource()
+    }
+    @objc private func reopenWindow() { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+    @objc private func pauseCollection() { model.pause() }
+    @objc private func quitCompanion() { NSApp.terminate(nil) }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        reopenWindow(); return true
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if model.backgroundEnabled {
+            // iCloud is only a visible, separately authorized one-shot batch.
+            if model.allowICloudDownloads { model.pause() }
+            sender.orderOut(nil); return false
+        }
         // Route closing through the same unsaved-export guard as Cmd-Q.
         NSApp.terminate(nil); return false
     }
@@ -45,10 +66,13 @@ import CompanionCore
 
 struct CompanionView: View {
     @ObservedObject var model: PhotosModel
+    @StateObject private var login = LoginItemController(service: SystemLoginItemService())
     @State private var confirmDisconnect = false
     @State private var confirmClear = false
     @State private var query = ""
     @State private var onlyText = false
+    @State private var folderCategory = "creativity"
+    @State private var folderTags = ""
     private var visiblePhotos: [ReviewPhoto] {
         model.photos.filter { photo in
             guard let context = model.contexts[photo.id] else { return query.isEmpty && !onlyText }
@@ -68,13 +92,44 @@ struct CompanionView: View {
                     Text(model.active ? (model.allowICloudDownloads ? "Private · iCloud download batch" : "Watching selected source") : "Private · on-device review").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("Let your photos be easier to find. Choose a source; review what belongs in Proof. No image is labelled as love, identity, or accomplishment for you.")
+                Toggle("Start this companion when I log in", isOn: Binding(
+                    get: { login.state == .enabled || login.state == .requiresApproval },
+                    set: { login.setEnabled($0) }))
+                Text(login.state == .requiresApproval ? "Allow the login item in System Settings. This does not grant source access." : "Separate from source and background permission. Quit stops collection until the companion runs again.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if login.actionFailed { Text("macOS could not change the login item. Its current status is shown; check System Settings.").font(.caption) }
+                if model.hasVault {
+                    Toggle("Keep this selected source collecting when the window is closed", isOn: Binding(
+                        get: { model.backgroundEnabled }, set: { model.setBackgroundEnabled($0) }))
+                        .disabled(!model.canSetBackground)
+                    Text("Saved separately for this source. Start after changing it. Local files only in background; text recognition stays off.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Choose a local folder…", action: model.chooseFolder).disabled(model.sourceLocked)
+                    if model.folderSelected {
+                        Text("Selected folder: \(model.selectedSourceLabel)").font(.caption)
+                        if model.trustedFolder {
+                            Button("Require individual review again", action: model.requireFolderReview)
+                        } else {
+                            HStack {
+                                Picker("Your category", selection: $folderCategory) {
+                                    ForEach(["belonging", "competence", "creativity", "parenting", "recovery", "money", "shipped", "awards", "kindness_received"], id: \.self) { Text($0).tag($0) }
+                                }
+                                TextField("Your tags, separated by commas", text: $folderTags)
+                            }
+                            Button("Automatically save from this exact folder…") {
+                                model.confirmTrustedFolder(category: folderCategory,
+                                    tags: folderTags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
+                            }
+                        }
+                    }
+                }
                 if !model.connected {
                     Button(model.connecting ? "Waiting for Photos permission…" : "Connect Apple Photos", action: model.connect)
                         .buttonStyle(.borderedProminent).disabled(model.connecting)
                     Text("macOS calls this a read/write Photos grant. This app only reads: it never edits or deletes Photos. You choose the narrower source below after connecting.")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
-                    HStack {
+                    if !model.folderSelected { HStack {
                         Picker("Source", selection: $model.source) {
                             Text("Choose a source").tag("")
                             Text("Recent Photos (no Favorites needed)").tag("recent")
@@ -83,11 +138,12 @@ struct CompanionView: View {
                         }.disabled(model.sourceLocked)
                         DatePicker("Since", selection: $model.since, in: ...Date(), displayedComponents: .date).disabled(model.sourceLocked)
                     }
-                    Toggle("Read text in these images on this Mac", isOn: $model.readTextLocally).disabled(model.sourceLocked)
+                    }
+                    Toggle("Read text in these images on this Mac", isOn: $model.readTextLocally).disabled(model.sourceLocked || model.folderSelected || model.backgroundEnabled)
                     Text("Optional on-device text recognition. May misread or miss words; it does not decide what is meaningful. Text stays in this companion, not the exported file. No images or text are uploaded.")
                         .font(.caption).foregroundStyle(.secondary)
                     Toggle("Download missing originals from iCloud for this batch", isOn: $model.allowICloudDownloads)
-                        .disabled(model.active || model.scanning)
+                        .disabled(model.active || model.scanning || model.folderSelected)
                     Text("Off by default. Uses your Apple Photos account, data, and disk space for up to 50 selected photos. Photos may cache larger originals before our size check. Switches off after this batch or Pause. No uploads or cloud AI.")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
@@ -99,6 +155,10 @@ struct CompanionView: View {
                     }
                 }
                 Text(model.message).font(.callout).textSelection(.enabled)
+                if model.hasVault {
+                    Text("Native vault: \(model.durableCount) new images retained during this run. Prepared-photo controls below affect only the export batch, not the vault.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button("Connect to Gallery on this Mac", action: model.startBridge).disabled(model.scanning)
                     if !model.pairingCode.isEmpty {
@@ -148,7 +208,7 @@ struct CompanionView: View {
                             .foregroundStyle(.secondary).padding()
                     }
                 }.frame(minHeight: 180)
-                Text("Still photos only, including the still part of Live Photos. Most recent 50 in the selected date range; retained media: 10 MiB each / 47 MiB per batch. iCloud downloads require the separate option above. No face recognition, AI uploads, or background agent when this app is closed. Original media may contain private EXIF metadata.")
+                Text("Still photos only, including the still part of Live Photos. Most recent 50 in the selected date range; retained media: 10 MiB each / 47 MiB per batch. iCloud downloads require the separate option above. Background collection requires its separate source choice and the companion process running. Quit stops collection. No face recognition or AI uploads. Original media may contain private EXIF metadata.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Prepared photos are memory-only until exported. The export is not a saved-Proof backup. Import it into the private review inbox; category and saving remain your choice.")
                     .font(.caption).foregroundStyle(.secondary)
