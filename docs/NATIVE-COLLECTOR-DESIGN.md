@@ -1,7 +1,7 @@
-# Native collector contract proposal
+# Native collector contract and current limits
 
-Status: native collector adapter implemented against `VaultAuthority`, pending
-whole-path integration and native-device acceptance. `PhotosModel.attachVault`
+Status: native collector adapter integrated with the single `VaultAuthority`.
+Native-device acceptance and public distribution remain separate gates. `PhotosModel.attachVault`
 accepts the single authority created by explicit native storage setup; it does
 not create storage or grants by itself. This document is not a release claim.
 The existing Photos v1 export remains unchanged.
@@ -105,17 +105,22 @@ source resolution/enumeration/receiver failures stop and durably pause the sourc
 revokes on Disconnect, and polls/observes only an explicitly started source.
 Foreground Photos preparation still produces the unchanged export batch.
 Background Photos preparation omits OCR and the ephemeral thumbnail batch;
-new media goes to the vault's pending queue. The native UI defaults to review mode. Trusted-folder approval displays the exact
+new media goes to the vault's pending queue by default. An explicitly confirmed
+trusted Photos source can save new items under its exact source/date/category/tag
+approval. The native UI defaults to review mode. Trusted-folder approval displays the exact
 resolved folder path, owner-chosen category and tags in a separate confirmation;
 it persists a paused trusted grant and never promotes existing pending items. Quit
 stops in-process work without rewriting source consent; an active background
 source can resume at the next launch, while explicit Pause remains persisted.
-Closing the window keeps the process running only under the source's
-background choice. Login registration remains a separate native action.
+Closing the window may keep the process running for separately granted client
+connections or reminders as well as background collection. Only the source's own
+background consent permits continued collection; foreground-only sources pause.
+Login registration remains a separate native action.
 
 Focused synthetic tests cover byte/receipt fidelity, folder top-level isolation,
 symlink rejection, bounded enumeration, stop-on-receiver-failure, login startup
 without registration and actual-status handling after OS action failure.
 No real Photos library, folder grant, login item, notification permission or
-release action was used. The lead must wire one vault instance into native setup
-and transport, and add whole-path source lifecycle tests against the final vault.
+release action was used. The integrated Mac build wires one vault instance into
+native setup and transport. Synthetic integration receipts remain distinct from
+actual OS source permission, restart, notification and public distribution checks.

@@ -4,6 +4,9 @@ import { LOCAL_MEDIA_ACCEPT } from '../lib/media';
 import './NativeVaultGallery.css';
 import { NativeVaultClient, validNativeFields, NATIVE_ERROR, type NativeFields, type NativeInfo, type NativeList, type NativeRecord, type NativeState } from '../lib/native-vault';
 
+interface AppliedNativeFilters { query: string; category: string; tag: string }
+const EMPTY_NATIVE_FILTERS: AppliedNativeFilters = { query: '', category: '', tag: '' };
+
 interface NativeDraft {
   readonly record: NativeRecord | null;
   fields: NativeFields;
@@ -46,6 +49,7 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   const [result, setResult] = useState<NativeList | null>(null);
   const [state, setState] = useState<NativeState>('saved');
   const [offset, setOffset] = useState(0);
+  const [applied, setApplied] = useState<AppliedNativeFilters>(EMPTY_NATIVE_FILTERS);
   const [query, setQuery] = useState(''); const [category, setCategory] = useState(''); const [tag, setTag] = useState('');
   const [busy, setBusy] = useState(false); const [message, setMessage] = useState('');
   const [hidden, setHidden] = useState(document.hidden);
@@ -58,7 +62,7 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
   const liveURLs = useRef(new Set<string>()); const busyRef = useRef(false);
   function clearEvidence(preserveDraft = false) {
     for (const url of liveURLs.current) URL.revokeObjectURL(url);
-    liveURLs.current.clear(); setUrls({}); setResult(null);
+    liveURLs.current.clear(); setUrls({}); setResult(null); setApplied(EMPTY_NATIVE_FILTERS);
     if (preserveDraft) setDraftSuspended(Boolean(editorRef.current));
     else { setEditor(null); setDraftSuspended(false); }
   }
@@ -121,13 +125,14 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
     catch { if (epoch.current === currentEpoch) disconnect(NATIVE_ERROR); }
     finally { if (epoch.current === currentEpoch) { busyRef.current = false; setBusy(false); } }
   }
-  function load(nextState: NativeState, nextOffset = 0) {
+  function load(nextState: NativeState, nextOffset = 0, filters?: AppliedNativeFilters) {
     if (!confirmDiscardDraft()) return;
+    const selected = filters ?? { query: nextState === 'saved' ? query.trim() : '', category, tag: tag.trim() };
     const currentEpoch = epoch.current;
     void run(async c => {
-      clearEvidence(); const list = await c.list(nextState, nextOffset, nextState === 'saved' ? query : '', category, tag);
+      clearEvidence(); const list = await c.list(nextState, nextOffset, selected.query, selected.category, selected.tag);
       if (epoch.current !== currentEpoch) return;
-      setState(nextState); setOffset(nextOffset); setResult(list);
+      setState(nextState); setOffset(nextOffset); setApplied(selected); setResult(list);
     });
   }
   function save(fields: NativeFields, file?: File) {
@@ -172,7 +177,11 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
       {result && <section aria-label={state === 'pending' ? 'Native pending review' : 'Native saved Proof'}>
         <h2>{state === 'pending' ? 'Pending review — not saved Proof' : 'Saved Proof'}</h2>
         <p>{result.matching === 'local-semantic' ? 'On-device meaning matching' : result.matching === 'local-literal-text' ? 'Literal text matching (local fallback)' : 'Newest added first'}{result.searchScope ? ` · ${result.searchScope}` : ''}{result.searchedCount !== undefined ? ` · ${result.searchedCount} records searched` : ''}</p>
-        {query && state === 'saved' && <p>Search considers up to the newest 100 saved records matching these filters. It may return fewer matches; browse without a query to page through the whole collection.</p>}
+        <p>Applied category: {PROOF_CATEGORIES.find(c => c.value === applied.category)?.label ?? 'All categories'} · Applied tag: {applied.tag || 'All tags'}. Form changes apply only when you open or search a view.</p>
+        {applied.query && state === 'saved' && <>
+          <p>Search considers up to the newest 100 saved records matching these filters and does not have additional result pages.{result.hasMore ? ' More filtered records exist outside this search window.' : ''}</p>
+          <button disabled={busy} onClick={() => { setQuery(''); setCategory(applied.category); setTag(applied.tag); load('saved', 0, { ...applied, query: '' }); }}>Browse all filtered saved Proof</button>
+        </>}
         {!result.items.length && <p>No items match this view.</p>}
         {result.items.map(record => <article className="proof-card" key={record.id}>
           <h3>{record.fields.title || (state === 'pending' ? 'Untitled candidate' : 'Untitled saved item')}</h3>
@@ -181,7 +190,7 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
           {record.receipt && <p>{record.receipt.representation === 'jpeg-preview' ? 'JPEG preview; original remains in Photos.' : 'Original media bytes.'} Source: {record.receipt.scope}. Original filename: {record.receipt.originalFilename}. Capture date: {record.receipt.captureDate ?? 'Unknown'}.</p>}
           {record.approval && <p>{record.approval.method === 'trusted-source' ? 'Saved under exact-source approval' : 'Saved by owner review'} · {record.approval.approvedAt}</p>}
           {record.media && !urls[record.id] && <button disabled={busy} onClick={() => preview(record)}>Open attachment</button>}
-          {urls[record.id] && (record.media?.mimeType.startsWith('video/') ? <video src={urls[record.id]} controls playsInline preload="metadata" aria-label="Saved evidence attachment" /> : <img src={urls[record.id]} alt="Saved evidence attachment" referrerPolicy="no-referrer" />)}
+          {urls[record.id] && (record.media?.mimeType.startsWith('video/') ? <video src={urls[record.id]} controls playsInline preload="metadata" aria-label={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} /> : <img src={urls[record.id]} alt={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} referrerPolicy="no-referrer" />)}
           <details><summary>Original source receipt and provenance</summary><pre>{JSON.stringify({ receipt: record.receipt, provenance: record.provenance, media: record.media, restoreReceipt: record.restoreReceipt }, null, 2)}</pre></details>
           <button disabled={busy} onClick={() => { if (confirmDiscardDraft()) setEditor(draftFor(record)); }}>{record.state === 'pending' ? 'Review candidate' : 'Edit Proof'}</button>
           <button disabled={busy} onClick={() => {
@@ -191,8 +200,10 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
             void run(async c => { await c.delete(record); if (epoch.current === currentEpoch) { clearEvidence(); setMessage('Removed from the native vault.'); } });
           }}>{record.state === 'pending' ? 'Remove candidate' : 'Delete Proof'}</button>
         </article>)}
-        <button disabled={busy || offset === 0} onClick={() => load(state, Math.max(0, offset - (query && state === 'saved' ? 10 : 30)))}>Previous page</button>
-        <button disabled={busy || !result.hasMore || offset >= 9970} onClick={() => load(state, offset + (query && state === 'saved' ? 10 : 30))}>Next page</button>
+        {result.matching === 'newest' && !applied.query && <>
+          <button disabled={busy || offset === 0} onClick={() => load(state, Math.max(0, offset - 30), applied)}>Previous page</button>
+          <button disabled={busy || !result.hasMore || offset >= 9970} onClick={() => load(state, offset + 30, applied)}>Next page</button>
+        </>}
       </section>}
     </>}
   </main>;

@@ -148,3 +148,55 @@ it('explicit disconnect erases a suspended draft without revealing it', async ()
   await connect(); expect(screen.queryByRole('button', { name: 'Resume draft' })).not.toBeInTheDocument();
   expect(screen.queryByDisplayValue('Erase on disconnect')).not.toBeInTheDocument();
 });
+it('treats truncated search as one window, not more pages, and browses with its applied filters', async () => {
+  const { fetcher } = setup(); await connect();
+  fetcher.mockImplementation(async (url: string, options: RequestInit) => {
+    if (url.endsWith('/info')) return response(info);
+    const input = JSON.parse(options.body as string);
+    return response({ collectionID, items: [record], hasMore: true, matching: input.query ? 'local-literal-text' : 'newest', ...(input.query ? { searchedCount: 100, searchScope: 'newest-100-filtered-saved' } : {}) });
+  });
+  fireEvent.change(screen.getByLabelText('Search saved native Proof'), { target: { value: 'draft' } });
+  fireEvent.change(screen.getByLabelText('Category filter'), { target: { value: 'creativity' } });
+  fireEvent.change(screen.getByLabelText('Tag filter'), { target: { value: 'chosen' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Search saved Proof' }));
+  await screen.findByText(/More filtered records exist outside this search window/);
+  expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Previous page' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Search saved native Proof'), { target: { value: '' } });
+  fireEvent.change(screen.getByLabelText('Category filter'), { target: { value: 'belonging' } });
+  fireEvent.change(screen.getByLabelText('Tag filter'), { target: { value: 'unsubmitted' } });
+  expect(screen.queryByRole('button', { name: 'Next page' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Browse all filtered saved Proof' }));
+  await screen.findByRole('button', { name: 'Next page' });
+  const lists = fetcher.mock.calls.filter(c => c[0].endsWith('/list'));
+  expect(JSON.parse(lists.at(-1)![1].body)).toEqual({ state: 'saved', limit: 30, offset: 0, category: 'creativity', tag: 'chosen' });
+  expect(screen.getByLabelText('Category filter')).toHaveValue('creativity');
+});
+it('paginates newest results using the applied filter snapshot, ignoring unsubmitted form edits', async () => {
+  const { fetcher } = setup(); await connect();
+  fetcher.mockImplementation(async (url: string) => url.endsWith('/info') ? response(info) : response({ collectionID, items: [record], matching: 'newest', hasMore: true }));
+  fireEvent.change(screen.getByLabelText('Category filter'), { target: { value: 'creativity' } });
+  fireEvent.change(screen.getByLabelText('Tag filter'), { target: { value: 'chosen' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Open saved Proof' })); await screen.findByText(note);
+  fireEvent.change(screen.getByLabelText('Search saved native Proof'), { target: { value: 'not yet searched' } });
+  fireEvent.change(screen.getByLabelText('Category filter'), { target: { value: 'belonging' } });
+  fireEvent.change(screen.getByLabelText('Tag filter'), { target: { value: 'new-tag' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(c => c[0].endsWith('/list'))).toHaveLength(2));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Previous page' }));
+  await waitFor(() => expect(fetcher.mock.calls.filter(c => c[0].endsWith('/list'))).toHaveLength(3));
+  const inputs = fetcher.mock.calls.filter(c => c[0].endsWith('/list')).map(c => JSON.parse(c[1].body));
+  expect(inputs).toEqual([0, 30, 0].map(offset => ({ state: 'saved', limit: 30, offset, category: 'creativity', tag: 'chosen' })));
+});
+it('labels pending media as a candidate rather than saved evidence', async () => {
+  const { fetcher } = setup(); await connect();
+  const pending = { ...record, state: 'pending', approval: undefined, media: { filename: 'synthetic.png', mimeType: 'image/png', sha256: 'a'.repeat(64), size: 8 } };
+  fetcher.mockImplementation(async (url: string) => url.endsWith('/info') ? response(info) : response({ collectionID, items: [pending], matching: 'newest', hasMore: false }));
+  vi.spyOn(NativeVaultClient.prototype, 'media').mockResolvedValue(new Blob(['synthetic']));
+  vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => 'blob:synthetic'), revokeObjectURL: vi.fn() }));
+  fireEvent.click(screen.getByRole('button', { name: 'Open pending review' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Open attachment' }));
+  expect(await screen.findByAltText('Pending candidate attachment')).toBeInTheDocument();
+  expect(screen.queryByAltText('Saved evidence attachment')).not.toBeInTheDocument();
+});

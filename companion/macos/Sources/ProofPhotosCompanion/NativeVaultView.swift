@@ -20,7 +20,7 @@ struct NativeVaultView: View {
                         Button("Create gallery connection · 24 hours", action: storage.issueGalleryFromOwnerAction)
                         if !storage.pairingCode.isEmpty {
                             Button("Copy private gallery code") { copy(storage.pairingCode) }
-                            Text("Paste into Proof Gallery → Native collection. This browser tab receives private media and editing permission.").font(.caption)
+                            Text("Paste into Proof Gallery → Connect native vault. This browser tab receives private media and editing permission.").font(.caption)
                         }
                         Button("Connect an assistant · saved text only…") { confirmAssistant = true }
                         if !storage.assistantConfiguration.isEmpty {
