@@ -58,8 +58,8 @@ jobs:
       - name: Build and verify the local app bundle
         working-directory: companion/macos
         run: |
-          PROOF_BUILD_TRIPLE=arm64-apple-macosx14.0 bash build-app.sh
-          test "$(lipo '.build/Proof Photos Companion.app/Contents/MacOS/ProofPhotosCompanion' -archs)" = arm64
+          bash build-app.sh
+          test "$(lipo '.build/Proof Photos Companion.app/Contents/MacOS/ProofPhotosCompanion' -archs)" = "$(uname -m)"
           codesign --verify --deep --strict --verbose=2 '.build/Proof Photos Companion.app'
       - name: Exercise the actual sandboxed packaged assistant helper
         working-directory: companion/macos

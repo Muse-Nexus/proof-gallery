@@ -58,6 +58,7 @@ policy. An assistant that imposes its own incompatible child-process sandbox may
 require a different supported integration; do not disable either sandbox.
 
 CI explicitly builds the debug helper before its process tests, then runs the
-same process suite again against the ad-hoc packaged helper after bundle signing.
+same process suite again against the ad-hoc packaged helper after bundle signing
+for the runner's native architecture (not an unexecutable cross-build).
 Missing packaged binaries fail rather than skip. Neither check uses release
 credentials or submits an artifact to Apple.
