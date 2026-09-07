@@ -56,3 +56,8 @@ This is a local ad-hoc process receipt, not Developer ID signing, notarization,
 installation, clean-device acceptance or proof of every assistant host's launch
 policy. An assistant that imposes its own incompatible child-process sandbox may
 require a different supported integration; do not disable either sandbox.
+
+CI explicitly builds the debug helper before its process tests, then runs the
+same process suite again against the ad-hoc packaged helper after bundle signing.
+Missing packaged binaries fail rather than skip. Neither check uses release
+credentials or submits an artifact to Apple.

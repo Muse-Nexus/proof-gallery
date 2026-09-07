@@ -33,8 +33,9 @@ Unknown fields remain unknown. No acute-distress-triggered surfacing.
    automatic saving with owner-selected organization. Pause/revoke survive
    restart; deleted evidence cannot silently reappear. Collection is bounded,
    deduplicated and recoverable. Sleep/offline failures do not broaden scope.
-3. **Assistant access.** Read-only Proof-specific MCP tools return 3–10 relevant
+3. **Assistant access.** Read-only Proof-specific MCP tools target 3–10 relevant
    saved items with exact notes/dates/sources, never pending or ordinary memory.
+   Return fewer when fewer items match; never pad results or invent evidence.
    Each client connection is explicit and revocable; there is no ambient grant
    merely because an assistant or companion is installed. Media disclosure is
    separately bounded. Retrieval has a clear local/semantic/fallback label.
