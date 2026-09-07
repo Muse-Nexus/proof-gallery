@@ -35,6 +35,8 @@ jobs:
         run: |
           bun run build
           bun run test:e2e:pwa
+      - name: Verify rendered browser against the synthetic native vault
+        run: bun scripts/e2e-native.mjs --dist "$GITHUB_WORKSPACE/dist"
 
   mac-companion:
     runs-on: macos-15

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
-import { readFile, writeFile, mkdtemp, mkdir, readdir, stat, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, readdir, stat, rm, access } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -15,10 +17,59 @@ const options = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, i
 }, []));
 assert(options.dist && options.dist.startsWith('/'), 'Supply the existing locally built dist directory; this harness never installs dependencies.');
 const dist = resolve(options.dist);
-const runtimeHome = process.env.HOME;
-const chromium = options.chromium ?? join(runtimeHome, 'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-const agent = options['agent-browser'] ?? join(runtimeHome, '.npm/_npx/6de2aa2fded2970c/node_modules/agent-browser/bin/agent-browser-darwin-arm64');
-await Promise.all([stat(chromium), stat(agent), stat(join(dist, 'index.html'))]);
+assert(process.platform === 'darwin' && ['arm64', 'x64'].includes(process.arch), 'The real Swift native fixture requires macOS arm64 or x64.');
+const runtimeHome = homedir();
+const nativeAgentName = `agent-browser-darwin-${process.arch}`;
+const executeRuntime = promisify(execFile);
+async function executable(path) { try { await access(path, constants.X_OK); return (await stat(path)).isFile(); } catch { return false; } }
+async function entries(path) { try { return (await readdir(path)).sort(); } catch { return []; } }
+async function pinnedPackage(path) {
+  try {
+    const metadata = JSON.parse(await readFile(join(path, 'package.json'), 'utf8'));
+    const binary = join(path, 'bin', nativeAgentName);
+    return metadata.name === 'agent-browser' && metadata.version === '0.36.0' && await executable(binary) ? binary : null;
+  } catch { return null; }
+}
+async function discoverAgent() {
+  if (options['agent-browser']) { assert(await executable(options['agent-browser']), 'Explicit agent-browser must be an existing executable.'); return options['agent-browser']; }
+  const packages = [join(repository, 'node_modules/agent-browser')];
+  // bunx's installed package lives in a UID-scoped temporary cache. Its raw
+  // archive cache can lack executable bits; never chmod or install it here.
+  for (const root of new Set([tmpdir(), '/private/tmp', '/tmp'])) {
+    for (const name of await entries(root)) if (/^bunx-\d+-agent-browser@0\.36\.0(?:$|-)/.test(name)) packages.push(join(root, name, 'node_modules/agent-browser'));
+  }
+  const bunCache = process.env.BUN_INSTALL_CACHE_DIR ?? join(runtimeHome, '.bun/install/cache');
+  for (const name of await entries(bunCache)) if (name.startsWith('agent-browser@0.36.0')) packages.push(join(bunCache, name));
+  const npmCache = join(process.env.npm_config_cache ?? join(runtimeHome, '.npm'), '_npx');
+  for (const name of await entries(npmCache)) packages.push(join(npmCache, name, 'node_modules/agent-browser'));
+  for (const path of packages) { const binary = await pinnedPackage(path); if (binary) return binary; }
+  throw new Error('Pinned agent-browser 0.36.0 is not cached. Run the existing CI runtime installation step first, or pass --agent-browser /absolute/cached/binary.');
+}
+async function discoverChromium() {
+  if (options.chromium) { assert(await executable(options.chromium), 'Explicit Chromium must be an existing executable.'); return options.chromium; }
+  const caches = [join(runtimeHome, 'Library/Caches/ms-playwright'), join(runtimeHome, '.cache/ms-playwright')];
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH?.startsWith('/')) caches.unshift(process.env.PLAYWRIGHT_BROWSERS_PATH);
+  const suffix = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const hostArch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+  for (const cache of caches) {
+    const revisions = (await entries(cache)).filter(name => /^chromium-\d+$/.test(name)).sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+    for (const revision of revisions) {
+      const root = join(cache, revision);
+      for (const relative of [`chrome-mac-${suffix}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+        `chrome-mac-${suffix}/Chromium.app/Contents/MacOS/Chromium`, 'chrome-mac/Chromium.app/Contents/MacOS/Chromium']) {
+        const binary = join(root, relative);
+        if (!await executable(binary)) continue;
+        const { stdout } = await executeRuntime('/usr/bin/lipo', [binary, '-archs'], { timeout: 5000 });
+        if (stdout.trim().split(/\s+/).includes(hostArch)) return binary;
+      }
+    }
+  }
+  throw new Error('A matching cached macOS Chromium was not found. Run the existing CI runtime installation step first, or pass --chromium /absolute/cached/binary.');
+}
+const [agent, chromium] = await Promise.all([discoverAgent(), discoverChromium()]);
+const { stdout: agentVersion } = await executeRuntime(agent, ['--version'], { timeout: 5000 });
+assert.equal(agentVersion.trim(), 'agent-browser 0.36.0', 'This harness uses the pinned agent-browser 0.36.0 command contract.');
+await stat(join(dist, 'index.html'));
 const origin = 'https://proof-gallery-9jn.pages.dev';
 const output = await mkdtemp('/private/tmp/proof-native-e2e-');
 const profile = join(output, 'browser-profile'); await mkdir(profile, { mode: 0o700 });
@@ -92,7 +143,8 @@ async function guardTarget(event) {
 async function browser(...command) {
   const { stdout } = await execute(agent, ['--config', config, '--namespace', session, '--session', session,
     '--cdp', String(browserPort), '--json', '--no-webmcp', '--no-auto-dialog', ...command],
-  { cwd: output, env: { ...environment, AGENT_BROWSER_AUTOSAVE_INTERVAL_MS: '0' }, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
+  { cwd: output, env: { ...environment, AGENT_BROWSER_AUTOSAVE_INTERVAL_MS: '0' }, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 })
+    .catch(() => { throw new Error(`agent-browser ${command[0]} failed`); });
   const result = JSON.parse(stdout.trim()); assert.equal(result.success, true, `agent-browser ${command[0]} failed`); return result.data;
 }
 async function snapshot() { return browser('snapshot', '-i'); }
@@ -140,6 +192,7 @@ try {
   // Fixture-only permission for the isolated profile. No user OS/browser grant.
   await cdp('Browser.setPermission', { permission: { name: 'loopback-network' }, setting: 'granted', origin });
   await browser('open', origin);
+  await browser('set', 'viewport', '1200', '900');
   await snapshot();
   assert((await text()).trim().length > 0, 'Blank app');
   await browser('screenshot', join(output, 'landing.png'));
@@ -159,6 +212,12 @@ try {
   await click('Open saved Proof'); await hasText(fixture.literal); await click('Open attachment');
   await until(async () => (await browser('eval', 'Boolean(document.querySelector(".native-vault img")?.complete && document.querySelector(".native-vault img")?.naturalWidth > 0)')).result === true, 'Synthetic native attachment did not decode');
   await browser('screenshot', join(output, 'native-saved.png'), '--full');
+  await browser('set', 'viewport', '390', '844');
+  await snapshot();
+  assert((await browser('eval', 'document.documentElement.scrollWidth <= window.innerWidth')).result === true, 'Native narrow view overflows horizontally');
+  assert((await text()).includes(fixture.literal), 'Narrow view lost the exact note');
+  await browser('screenshot', join(output, 'native-saved-narrow.png'), '--full');
+  await browser('set', 'viewport', '1200', '900');
   await click('Edit Proof'); const edited = 'I did not promise a result. Synthetic owner edit.';
   await fill('Exact words or note', edited); await click('Save in native vault'); await hasText('Saved in the native vault.');
   assert.equal((await assistantGet()).value.item.fields.evidenceText, edited);
@@ -172,7 +231,7 @@ try {
   assert.equal(errors.length, 0, 'Uncaught browser exception');
   assert(nativeRequests.some(r => r.path === '/v2/gallery/approve' && r.method === 'POST'));
   await browser('errors'); await browser('screenshot', join(output, 'native-revoked.png'));
-  await writeFile(join(output, 'receipt.json'), JSON.stringify({ origin, dist, indexSHA256: createHash('sha256').update(files.get('/index.html')).digest('hex'), receipts, publicRequests, nativeRequests, blocked, browserExceptions: errors, ephemeralLoopbackNetworkPermission: true }, null, 2));
+  await writeFile(join(output, 'receipt.json'), JSON.stringify({ origin, dist, runtimes: { platform: process.platform, architecture: process.arch, agentBrowser: agent, chromium }, indexSHA256: createHash('sha256').update(files.get('/index.html')).digest('hex'), receipts, publicRequests, nativeRequests, blocked, browserExceptions: errors, ephemeralLoopbackNetworkPermission: true }, null, 2));
   console.log(`Synthetic browser/native receipt: ${join(output, 'receipt.json')}`);
 } catch (error) {
   await writeFile(join(output, 'failure.txt'), String(error));
