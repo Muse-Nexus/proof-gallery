@@ -35,6 +35,8 @@ jobs:
         run: |
           bun run build
           bun run test:e2e:pwa
+      - name: Verify rendered browser against the synthetic native vault
+        run: bun scripts/e2e-native.mjs --dist "$GITHUB_WORKSPACE/dist"
 
   mac-companion:
     runs-on: macos-15
@@ -44,21 +46,26 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Test the synthetic companion format
         working-directory: companion/macos
-        run: swift test
+        run: |
+          swift build --product ProofMCP
+          swift test
       - name: Validate native release inputs
         working-directory: companion/macos
         run: |
           bash -n build-app.sh package-release.sh
-          plutil -lint Info.plist ProofPhotosCompanion.entitlements
+          plutil -lint Info.plist ProofMCP-Info.plist ProofPhotosCompanion.entitlements ProofMCP.entitlements
           ! PROOF_RELEASE_ACTION=invalid bash package-release.sh
           ! PROOF_RELEASE_ACTION=notarize-existing PROOF_EXPECTED_TEAM_ID=ABCDEFGHIJ bash package-release.sh
           bash test-release-safety.sh
       - name: Build and verify the local app bundle
         working-directory: companion/macos
         run: |
-          PROOF_BUILD_TRIPLE=arm64-apple-macosx14.0 bash build-app.sh
-          test "$(lipo '.build/Proof Photos Companion.app/Contents/MacOS/ProofPhotosCompanion' -archs)" = arm64
+          bash build-app.sh
+          test "$(lipo '.build/Proof Photos Companion.app/Contents/MacOS/ProofPhotosCompanion' -archs)" = "$(uname -m)"
           codesign --verify --deep --strict --verbose=2 '.build/Proof Photos Companion.app'
+      - name: Exercise the actual sandboxed packaged assistant helper
+        working-directory: companion/macos
+        run: PROOF_TEST_PACKAGED_HELPER=1 swift test --filter ProofMCPProcessTests
 
   verify:
     needs: [mac-companion, browser-e2e]

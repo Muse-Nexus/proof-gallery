@@ -26,8 +26,10 @@ it("makes iCloud downloads explicit, one-shot and reset by Pause", () => {
   expect(native).toContain('self.activeRead === stream');
   expect(native).toContain('DispatchWorkItem { stream.timeOut() }');
   const pause = native.slice(native.indexOf('func pause()'), native.indexOf('func disconnect()'));
-  expect(pause).toContain('allowICloudDownloads = false');
-  expect(pause).toContain('activeRead?.cancel()');
+  expect(pause).toContain('stopForTermination()');
+  const stop = native.slice(native.indexOf('func stopForTermination()'), native.indexOf('func pause()'));
+  expect(stop).toContain('allowICloudDownloads = false');
+  expect(stop).toContain('activeRead?.cancel()');
   expect(entrypoint).toContain('Download missing originals from iCloud for this batch');
   expect(entrypoint).toContain('Photos may cache larger originals before our size check');
 });
@@ -38,7 +40,11 @@ it("keeps connect, bounded start, pause and lifecycle gates explicit", () => {
   expect(native).toContain("activeRead?.cancel()");
   expect(native).toContain("self.generation == scanGeneration");
   const pause = native.slice(native.indexOf("func pause()"), native.indexOf("func disconnect()"));
-  expect(pause).toContain("unregisterChangeObserver");
+  expect(pause).toContain("stopForTermination()");
+  expect(pause).toContain("vault.pauseSource");
+  const stop = native.slice(native.indexOf("func stopForTermination()"), native.indexOf("func pause()"));
+  expect(stop).toContain("unregisterChangeObserver");
+  expect(stop).not.toContain("vault.pauseSource");
   expect(entrypoint).toContain("func windowShouldClose");
   expect(entrypoint).toContain("!model.photos.isEmpty && !model.exported");
 });
