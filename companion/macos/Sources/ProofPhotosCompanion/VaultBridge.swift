@@ -11,7 +11,7 @@ final class VaultBridge: @unchecked Sendable {
     private var listener: NWListener?
     private var connections: [UUID: NWConnection] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
-    private var authorizedRequests: [UUID: VaultBridgeRequest] = [:]
+    private var preparedResponses: [UUID: VaultPreparedResponse] = [:]
     private var session = UUID()
     private var port: UInt16 = 0
     private var windowStart = DispatchTime.now().uptimeNanoseconds
@@ -46,11 +46,11 @@ final class VaultBridge: @unchecked Sendable {
         session = UUID(); listener?.cancel(); listener = nil; port = 0
         for task in tasks.values { task.cancel() }; tasks.removeAll()
         for connection in connections.values { connection.cancel() }; connections.removeAll()
-        authorizedRequests.removeAll()
+        preparedResponses.removeAll()
     }
     private func finish(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()
-        authorizedRequests.removeValue(forKey: id)
+        preparedResponses.removeValue(forKey: id)
         connections.removeValue(forKey: id)?.cancel()
     }
     private func accept(_ connection: NWConnection, session: UUID) {
@@ -87,7 +87,7 @@ final class VaultBridge: @unchecked Sendable {
                 do {
                     request = try VaultBridgeRequest.parse(buffer.subdata(in: 0..<end.upperBound), port: self.port)
                     if let request, !request.preflight {
-                        try self.service.authorize(request); self.authorizedRequests[id] = request
+                        try self.service.authorize(request)
                     }
                 } catch { self.respond(id, session: session, status: "403 Forbidden", data: Data(), cors: request?.gallery == true); return }
                 buffer.removeSubrange(0..<end.upperBound)
@@ -106,14 +106,24 @@ final class VaultBridge: @unchecked Sendable {
         tasks[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let data = try await self.service.handle(request, body: body)
-                guard data.count <= 14 * 1024 * 1024 else { throw VaultError.capacity }
+                let response = try await self.service.handle(request, body: body)
+                guard response.data.count <= 14 * 1024 * 1024 else { throw VaultError.capacity }
                 try Task.checkCancellation()
                 self.queue.async {
-                    guard self.session == session else { return }
-                    // A revoked/expired connection cannot release queued bytes.
-                    do { try self.service.authorize(request); self.respond(id, session: session, status: "200 OK", data: data, cors: request.gallery) }
-                    catch { self.respond(id, session: session, status: "403 Forbidden", data: Data(), cors: request.gallery) }
+                    guard self.session == session, self.connections[id] != nil else { return }
+                    // Capture exact evidence/scopes as well as the client grant.
+                    // Check and enqueue under the authority lock, before any response bytes.
+                    do {
+                        try self.service.withAuthorizedResponse(response) {
+                            self.preparedResponses[id] = response
+                            self.respond(id, session: session, status: "200 OK", data: response.data, cors: request.gallery)
+                        }
+                    } catch {
+                        self.preparedResponses.removeValue(forKey: id)
+                        let status: String
+                        if case VaultError.staleRevision = error { status = "409 Conflict" } else { status = "403 Forbidden" }
+                        self.respond(id, session: session, status: status, data: Data(), cors: request.gallery)
+                    }
                 }
             } catch {
                 let status: String
@@ -140,15 +150,16 @@ final class VaultBridge: @unchecked Sendable {
     private func sendBody(_ id: UUID, session: UUID, data: Data, offset: Int) {
         guard self.session == session, let connection = connections[id] else { return }
         guard offset < data.count else { finish(id); return }
-        if let request = authorizedRequests[id] {
-            do { try service.authorize(request) }
-            catch { finish(id); return }
-        }
+        guard let response = preparedResponses[id] else { finish(id); return }
         let end = min(offset + 64 * 1024, data.count)
-        connection.send(content: data.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
-            guard let self, self.session == session else { return }
-            if error != nil { self.finish(id); return }
-            self.sendBody(id, session: session, data: data, offset: end)
-        })
+        do {
+            try service.withAuthorizedResponse(response) {
+                connection.send(content: data.subdata(in: offset..<end), completion: .contentProcessed { [weak self] error in
+                    guard let self, self.session == session else { return }
+                    if error != nil { self.finish(id); return }
+                    self.sendBody(id, session: session, data: data, offset: end)
+                })
+            }
+        } catch { finish(id) }
     }
 }

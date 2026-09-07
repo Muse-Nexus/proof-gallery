@@ -290,6 +290,15 @@ public final class ProofVault: VaultAuthority, @unchecked Sendable {
             let item = try record(id); guard item.state == .saved, item.approval != nil else { throw VaultError.forbidden }; return item
         }
     }
+    /// Owner/bridge in-process metadata only. The bridge must hold its matching
+    /// client authorization while using this; no media bytes or digest work here.
+    public func metadata(id: String, revision: String, state: VaultState? = nil) throws -> VaultRecord {
+        try serialized {
+            let item = try record(id, revision: revision)
+            guard state == nil || item.state == state else { throw VaultError.staleRevision }
+            return item
+        }
+    }
     /// In-process owner/gallery access, never an unauthenticated network route.
     public func media(id: String, revision: String) throws -> VaultMedia {
         try serialized {

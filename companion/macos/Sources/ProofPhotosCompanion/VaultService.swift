@@ -3,6 +3,20 @@ import CompanionCore
 import CompanionVault
 import CompanionIntelligence
 
+/// Immutable bytes and the exact authority/evidence used to prepare them.
+/// Internal only: fence metadata is never added to the wire response.
+struct VaultPreparedResponse: Sendable {
+    let data: Data
+    fileprivate let request: VaultBridgeRequest
+    fileprivate let requiredScopes: [VaultClientScope]
+    fileprivate let records: [VaultResponseRecordFence]
+}
+private struct VaultResponseRecordFence: Sendable {
+    let id: String
+    let revision: String
+    let state: VaultState
+}
+
 /// No source/grant/reminder management routes. Native owner actions alone
 /// create grants; browser and assistant permissions are different kinds.
 final class VaultService: @unchecked Sendable {
@@ -32,6 +46,24 @@ final class VaultService: @unchecked Sendable {
         var expiresAt: String; var scopes: [VaultClientScope]
     }
     private func encode<T: Encodable>(_ value: T) throws -> Data { try JSONEncoder().encode(value) }
+    private func prepared(_ request: VaultBridgeRequest, data: Data, scopes: [VaultClientScope] = [.savedText],
+                          records: [VaultRecord] = []) -> VaultPreparedResponse {
+        VaultPreparedResponse(data: data, request: request, requiredScopes: scopes,
+            records: records.map { VaultResponseRecordFence(id: $0.id, revision: $0.revision, state: $0.state) })
+    }
+    /// Authorization, exact evidence checks and synchronous transport enqueue
+    /// share the authority lock. A completed revoke/edit/delete precedes every
+    /// later check/enqueue; previously enqueued bytes cannot be retracted.
+    func withAuthorizedResponse<T>(_ response: VaultPreparedResponse, operation: () throws -> T) throws -> T {
+        try authorized(response.request, scope: .savedText) {
+            for scope in response.requiredScopes {
+                _ = try vault.validateClient(token: response.request.token,
+                    kind: response.request.gallery ? .gallery : .assistant, scope: scope, collectionID: vault.collectionID)
+            }
+            for item in response.records { _ = try vault.metadata(id: item.id, revision: item.revision, state: item.state) }
+            return try operation()
+        }
+    }
     private func decode<T: Decodable>(_ value: T.Type, body: Data, keys: Set<String>) throws -> T {
         guard let object = try JSONSerialization.jsonObject(with: body) as? [String: Any],
               Set(object.keys).isSubset(of: keys) else { throw VaultError.invalid }
@@ -59,7 +91,7 @@ final class VaultService: @unchecked Sendable {
         }
         return items
     }
-    func handle(_ request: VaultBridgeRequest, body: Data) async throws -> Data {
+    func handle(_ request: VaultBridgeRequest, body: Data) async throws -> VaultPreparedResponse {
         try Task.checkCancellation()
         _ = try authorized(request, scope: .savedText) { true }
         switch request.path {
@@ -67,11 +99,14 @@ final class VaultService: @unchecked Sendable {
             try allowedEmpty(body)
             return try authorized(request, scope: .savedText) {
                 let grant = try vault.validateClient(token: request.token, kind: .gallery, scope: .savedText, collectionID: vault.collectionID)
-                return try encode(Info(collectionID: vault.collectionID, grantID: grant.id, expiresAt: grant.expiresAt, scopes: grant.scopes))
+                return prepared(request, data: try encode(Info(collectionID: vault.collectionID, grantID: grant.id, expiresAt: grant.expiresAt, scopes: grant.scopes)))
             }
         case "/v2/assistant/get":
             let input = try decode(GetInput.self, body: body, keys: ["id"])
-            return try encode(ItemResult(item: vault.get(token: request.token, collectionID: vault.collectionID, id: input.id)))
+            return try authorized(request, scope: .savedText) {
+                let item = try vault.get(token: request.token, collectionID: vault.collectionID, id: input.id)
+                return prepared(request, data: try encode(ItemResult(item: item)), records: [item])
+            }
         case "/v2/assistant/search":
             let input = try decode(SearchInput.self, body: body, keys: ["query", "category", "tag", "limit"])
             return try await search(request, query: input.query, category: input.category, tag: input.tag, limit: input.limit ?? 6)
@@ -85,33 +120,43 @@ final class VaultService: @unchecked Sendable {
             return try authorized(request, scope: input.state == .saved ? .savedText : .galleryReview) {
                 let records = try filter(all(input.state), category: input.category, tag: input.tag)
                 let offset = input.offset ?? 0, limit = input.limit ?? 100
-                return try encode(ListResult(collectionID: vault.collectionID, items: Array(records.dropFirst(offset).prefix(limit)), matching: "newest", hasMore: records.count > offset + limit))
+                let page = Array(records.dropFirst(offset).prefix(limit))
+                return prepared(request, data: try encode(ListResult(collectionID: vault.collectionID, items: page, matching: "newest", hasMore: records.count > offset + limit)),
+                    scopes: input.state == .saved ? [.savedText] : [.savedText, .galleryReview], records: page)
             }
         case "/v2/gallery/create":
             let input = try decode(CreateInput.self, body: body, keys: ["input"]).input
             // Only the native collector can attest provider receipts.
             guard input.receipt == nil, input.provenance.isEmpty else { throw VaultError.invalid }
-            return try authorized(request, scope: .galleryReview) { try encode(ItemResult(item: vault.saveManual(input))) }
+            return try authorized(request, scope: .galleryReview) {
+                let item = try vault.saveManual(input)
+                return prepared(request, data: try encode(ItemResult(item: item)), scopes: [.savedText, .galleryReview], records: [item])
+            }
         case "/v2/gallery/edit", "/v2/gallery/approve":
             let input = try decode(EditInput.self, body: body, keys: ["id", "revision", "fields"])
             return try authorized(request, scope: .galleryReview) {
                 let item = request.path.hasSuffix("/approve") ? try vault.approve(id: input.id, revision: input.revision, fields: input.fields) : try vault.edit(id: input.id, revision: input.revision, fields: input.fields)
-                return try encode(ItemResult(item: item))
+                return prepared(request, data: try encode(ItemResult(item: item)), scopes: [.savedText, .galleryReview], records: [item])
             }
         case "/v2/gallery/delete":
             let input = try decode(IDInput.self, body: body, keys: ["id", "revision"])
             return try authorized(request, scope: .galleryReview) {
-                try vault.delete(id: input.id, revision: input.revision); return Data("{\"deleted\":true}".utf8)
+                try vault.delete(id: input.id, revision: input.revision)
+                return prepared(request, data: Data("{\"deleted\":true}".utf8), scopes: [.savedText, .galleryReview])
             }
         case "/v2/gallery/media":
             let input = try decode(IDInput.self, body: body, keys: ["id", "revision"])
             return try authorized(request, scope: .savedMedia) {
-                try authorized(request, scope: .galleryReview) { try encode(vault.media(id: input.id, revision: input.revision)) }
+                try authorized(request, scope: .galleryReview) {
+                    let item = try vault.metadata(id: input.id, revision: input.revision)
+                    return prepared(request, data: try encode(vault.media(id: input.id, revision: input.revision)),
+                        scopes: [.savedText, .savedMedia, .galleryReview], records: [item])
+                }
             }
         default: throw VaultError.forbidden
         }
     }
-    private func search(_ request: VaultBridgeRequest, query: String, category: String?, tag: String?, limit: Int) async throws -> Data {
+    private func search(_ request: VaultBridgeRequest, query: String, category: String?, tag: String?, limit: Int) async throws -> VaultPreparedResponse {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, query.utf8.count <= 500, (3...10).contains(limit) else { throw VaultError.invalid }
         let filtered = try authorized(request, scope: .savedText) { try filter(all(.saved), category: category, tag: tag) }
         let snapshot = Array(filtered.prefix(100))
@@ -148,7 +193,7 @@ final class VaultService: @unchecked Sendable {
             func result() throws -> Data { try encode(ListResult(collectionID: vault.collectionID, items: selected, matching: matching, hasMore: filtered.count > snapshot.count, searchedCount: snapshot.count, searchScope: "newest-100-filtered-saved")) }
             var data = try result()
             while data.count > ProofMCPProtocol.maximumTextResponseBytes && !selected.isEmpty { selected.removeLast(); data = try result() }
-            return data
+            return prepared(request, data: data, records: selected)
         }
     }
 }
