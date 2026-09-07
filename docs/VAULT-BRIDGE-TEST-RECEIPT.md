@@ -50,10 +50,14 @@ platform, native UI usability or real-source collection. Semantic ranking may us
 the existing on-device engine; both its label and literal fallback are accepted,
 while exact returned evidence is checked. No cloud-model request is added.
 
-Read-only review caught missing midstream revalidation. The integration now
-rechecks the connection grant before each 64 KiB body chunk and drops its
-in-memory token on connection finish/stop. Bytes already transmitted cannot be
-retracted; deterministic midstream cancellation remains an additional test gate.
+Read-only review caught missing midstream revalidation, followed by a second
+gap where grant-only checks did not fence deleted/edited evidence. The integration
+now checks the client kind, every required scope and each returned record's exact
+revision/state under the authority lock before first/header and each 64 KiB body
+enqueue. It drops prepared bytes/token state on connection finish/stop. Seven
+deterministic tests exercise that exact production callback with changes between
+chunks; see [response-fence review](RESPONSE-FENCE-REVIEW.md). Bytes already queued
+or transmitted cannot be retracted; these are not timing-based socket-race claims.
 The integration fixture includes explicit synthetic capture metadata, matching
 the stricter source rule that an occurred date cannot be invented when its
 provider receipt has no capture date.

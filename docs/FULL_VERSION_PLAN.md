@@ -1,6 +1,8 @@
 # Full Proof Gallery: implementation and acceptance
 
-Status: implementation in progress, not a release claim.
+Status: native-first implementation assembled and undergoing final acceptance.
+Public release and real-device gates remain open; this is not a claim that the
+entire Windows/Android product is complete.
 
 Mark requested the complete low-effort product, with separate worker tasks and
 one lead responsible for integration. Baseline: deployed standalone main
