@@ -3,6 +3,8 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
 } from "react";
@@ -10,6 +12,7 @@ import {
   PROOF_CATEGORIES,
   PROOF_SOURCE_TYPES,
   parseTags,
+  categoryLabel,
   validateProofImage,
   type ProofCategory,
   type ProofItem,
@@ -17,6 +20,8 @@ import {
   type ProofSourceType,
 } from "../lib/proof";
 import { LOCAL_MEDIA_ACCEPT, validateLocalProofMedia } from "../lib/media";
+import { appendCapturedText, readCaptureTransfer } from "../lib/capture-transfer";
+import { suggestNoteOrganization } from "../lib/note-assist";
 import { ProofMedia } from "./ProofMedia";
 
 type EditorResult = {
@@ -43,8 +48,8 @@ export function ProofEditor({
   const [title, setTitle] = useState(item?.title ?? "");
   const [evidenceText, setEvidenceText] = useState(item?.evidenceText ?? "");
   const [occurredOn, setOccurredOn] = useState(item?.occurredOn ?? "");
-  const [category, setCategory] = useState<ProofCategory>(
-    item?.category ?? "belonging",
+  const [category, setCategory] = useState<ProofCategory | "">(
+    item?.category ?? "",
   );
   const [sourceType, setSourceType] = useState<ProofSourceType>(
     item?.sourceType ?? "other",
@@ -58,13 +63,21 @@ export function ProofEditor({
   const [error, setError] = useState<string | null>(null);
   const [validatingImage, setValidatingImage] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [useSuggestions, setUseSuggestions] = useState(!item);
+  const [touched, setTouched] = useState({ title: Boolean(item), category: Boolean(item), tags: Boolean(item) });
+  const [captureStatus, setCaptureStatus] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(item));
   const selectionGeneration = useRef(0);
   const selectionPending = useRef(false);
   const savePending = useRef(false);
   const mounted = useRef(false);
   const dialogRef = useRef<HTMLElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null);
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
   const editingLocked = busy || saving;
+  const suggestions = suggestNoteOrganization(evidenceText);
+  const displayedTitle = !touched.title && useSuggestions ? suggestions.title || image?.name.slice(0, 200) || title : title;
+  const displayedCategory = !touched.category && useSuggestions ? suggestions.category ?? category : category;
+  const displayedTags = !touched.tags && useSuggestions ? suggestions.tags.join(", ") : tags;
 
   useEffect(() => {
     mounted.current = true;
@@ -72,7 +85,7 @@ export function ProofEditor({
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    titleInputRef.current?.focus();
+    noteInputRef.current?.focus();
     return () => {
       mounted.current = false;
       selectionGeneration.current++;
@@ -99,9 +112,12 @@ export function ProofEditor({
 
     const focusable = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
       ) ?? [],
-    );
+    ).filter(element => {
+      const closedDetails = element.closest("details:not([open])");
+      return !closedDetails || element === closedDetails.querySelector("summary");
+    });
     const first = focusable[0];
     const last = focusable.at(-1);
     if (!first || !last) return;
@@ -116,9 +132,12 @@ export function ProofEditor({
   }
 
   async function selectImage(event: ChangeEvent<HTMLInputElement>) {
-    if (busy || savePending.current) return;
     const input = event.currentTarget;
-    const selected = input.files?.[0] ?? null;
+    await acceptImage(input.files?.[0] ?? null, input);
+  }
+
+  async function acceptImage(selected: File | null, input?: HTMLInputElement) {
+    if (busy || savePending.current) return;
     const generation = ++selectionGeneration.current;
     setError(null);
     setImage(null);
@@ -139,7 +158,7 @@ export function ProofEditor({
       setRemoveExistingImage(false);
     } catch (selectionError) {
       if (!isCurrent()) return;
-      input.value = "";
+      if (input) input.value = "";
       setImage(null);
       setError(
         selectionError instanceof Error
@@ -154,22 +173,43 @@ export function ProofEditor({
     }
   }
 
+  function capture(event: ClipboardEvent<HTMLDivElement> | DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (busy || savePending.current) return;
+    setError(null);
+    setCaptureStatus("");
+    try {
+      const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
+      const captured = readCaptureTransfer(transfer);
+      const nextText = appendCapturedText(evidenceText, captured.text);
+      setEvidenceText(nextText);
+      if (captured.file) void acceptImage(captured.file);
+      if (captured.text) setCaptureStatus("Text added to your note as pasted. Check its source before saving.");
+    } catch (captureError) {
+      setError(captureError instanceof Error ? captureError.message : "That capture could not be added");
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy || savePending.current || selectionPending.current) return;
+    if (!displayedTitle.trim() || !displayedCategory) {
+      setError("Add a title and choose a category before saving.");
+      return;
+    }
     savePending.current = true;
     setSaving(true);
     setError(null);
     try {
       await onSave({
         input: {
-          title,
+          title: displayedTitle,
           evidenceText,
           occurredOn: occurredOn || null,
-          category,
+          category: displayedCategory,
           sourceType,
           source: source || null,
-          tags: parseTags(tags),
+          tags: parseTags(displayedTags),
           person: person || null,
           project: project || null,
         },
@@ -212,10 +252,26 @@ export function ProofEditor({
           </button>
         </header>
         <form className="editor-form" onSubmit={submit}>
-          <label>
-            Title
-            <input ref={titleInputRef} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} required disabled={editingLocked} />
+          <label className="full-width">
+            Exact quote or evidence <span className="optional">a short note is enough</span>
+            <textarea
+              ref={noteInputRef}
+              value={evidenceText}
+              disabled={editingLocked}
+              onChange={(event) => setEvidenceText(event.target.value)}
+              placeholder="A message you want to keep, or a few words about this moment…"
+              rows={4}
+              maxLength={20_000}
+              required={!allowLocalMedia || !(image || (item?.imagePath && !removeExistingImage))}
+            />
           </label>
+          <div className="editor-capture full-width" role="group" tabIndex={editingLocked ? -1 : 0}
+            aria-label="Paste or drop evidence" aria-describedby="capture-guidance" aria-disabled={editingLocked}
+            onPaste={capture} onDrop={capture} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = editingLocked ? "none" : "copy"; }}>
+            <strong>Paste or drop evidence here</strong>
+            <span id="capture-guidance">Click or focus this area, then paste an image or text. You can also drop one attachment. Text is appended as written; links are not downloaded.</span>
+          </div>
+          {captureStatus && <p className="selection-status full-width" role="status">{captureStatus}</p>}
           <label className="full-width evidence-image-field">
             {allowLocalMedia ? "Evidence photo or clip" : "Evidence image or screenshot"} <span className="optional">optional · {allowLocalMedia ? "JPEG, PNG, WebP, GIF, MP4, or WebM" : "JPEG, PNG, WebP, or GIF"} · 10 MB max</span>
             <span className="field-guidance">
@@ -278,17 +334,31 @@ export function ProofEditor({
               </label>
             </div>
           )}
-          <label className="full-width">
-            Exact quote or evidence
-            <textarea
-              value={evidenceText}
-              disabled={editingLocked}
-              onChange={(event) => setEvidenceText(event.target.value)}
-              rows={5}
-              maxLength={20_000}
-              required={!allowLocalMedia || !(image || (item?.imagePath && !removeExistingImage))}
-            />
+          {evidenceText.trim() && <div className="editor-note-suggestions full-width">
+            <label className="checkbox-row"><input type="checkbox" checked={useSuggestions} disabled={editingLocked} onChange={event => setUseSuggestions(event.target.checked)} />Use word-based organization suggestions</label>
+            <p>{useSuggestions && !touched.category && suggestions.category
+              ? `Category cue: “${suggestions.cue}” → ${categoryLabel(suggestions.category)}.`
+              : "Choose the category that helps you find this again."} Your exact note stays unchanged. Any title, category, or tags you edit stay yours.</p>
+            {useSuggestions && !touched.tags && suggestions.tags.length > 0 && <p>Suggested tags: {suggestions.tags.map(tag => `#${tag}`).join(" ")}. Edit them in the details below.</p>}
+            <small>Simple word matches, not AI interpretation or a conclusion about what this means.</small>
+          </div>}
+          <label>
+            Title
+            <input value={displayedTitle} onChange={(event) => { setTouched(current => ({ ...current, title: true })); setTitle(event.target.value); }} maxLength={200} required disabled={editingLocked} />
           </label>
+          <label>
+            Category
+            <select value={displayedCategory} required disabled={editingLocked} onChange={(event) => { setTouched(current => ({ ...current, category: true })); setCategory(event.target.value as ProofCategory | ""); }}>
+              <option value="">Choose a category</option>
+              {PROOF_CATEGORIES.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <details className="editor-details full-width" open={detailsOpen} onToggle={event => setDetailsOpen(event.currentTarget.open)}>
+          <summary onClick={event => { event.preventDefault(); setDetailsOpen(open => !open); }}>Date, source &amp; other details</summary>
+          <p className="field-guidance">Leave unknown details blank. Pasting a message or attaching an image does not identify its date, sender, or source.</p>
+          <div className="editor-detail-fields">
           <label>
             Occurred date
             <input
@@ -298,14 +368,6 @@ export function ProofEditor({
               onInput={(event) => setOccurredOn(event.currentTarget.value)}
               onChange={(event) => setOccurredOn(event.currentTarget.value)}
             />
-          </label>
-          <label>
-            Category
-            <select value={category} disabled={editingLocked} onChange={(event) => setCategory(event.target.value as ProofCategory)}>
-              {PROOF_CATEGORIES.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
           </label>
           <label>
             Source type
@@ -325,7 +387,7 @@ export function ProofEditor({
           </label>
           <label>
             Tags
-            <input value={tags} disabled={editingLocked} onChange={(event) => setTags(event.target.value)} placeholder="launch, family, client" />
+            <input value={displayedTags} disabled={editingLocked} onChange={(event) => { setTouched(current => ({ ...current, tags: true })); setTags(event.target.value); }} placeholder="launch, family, client" />
           </label>
           <label>
             Person <span className="optional">optional</span>
@@ -335,7 +397,9 @@ export function ProofEditor({
             Project <span className="optional">optional</span>
             <input value={project} disabled={editingLocked} onChange={(event) => setProject(event.target.value)} maxLength={200} />
           </label>
-          {error && <p className="error-banner full-width">{error}</p>}
+          </div>
+          </details>
+          {error && <p className="error-banner full-width" role="alert">{error}</p>}
           <footer className="editor-actions full-width">
             <button type="button" className="secondary-button" onClick={closeEditor} disabled={editingLocked}>Cancel</button>
             <button className="primary-button" disabled={editingLocked || validatingImage}>{editingLocked ? "Saving…" : validatingImage ? "Checking attachment…" : "Save Proof"}</button>

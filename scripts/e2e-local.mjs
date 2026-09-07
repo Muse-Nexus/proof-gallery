@@ -94,6 +94,19 @@ async function menu(name) {
 }
 function passed(name) { receipts.push(name); console.log(`PASS ${name}`); }
 
+// JSON quotes alone are not a code-embedding boundary: also escape HTML
+// delimiters and JavaScript line separators, without changing fixture bytes.
+function scriptLiteral(value) {
+  assert.equal(typeof value, "string", "Browser fixture literals must be strings");
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g,
+    character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+for (const value of ["</script><script>alert('synthetic')</script>", "quotes: \"'\\\n\r\t", "<>&\u2028\u2029", "literal \\u003c"]) {
+  const literal = scriptLiteral(value);
+  assert.equal(JSON.parse(literal), value, "Safe browser fixture encoding must preserve exact text");
+  assert(!/[<>&\u2028\u2029]/.test(literal), "Unsafe code-embedding delimiters must be escaped");
+}
+
 // A known valid, synthetic one-pixel PNG, not user media or decorative artwork.
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5xkAAAAASUVORK5CYII=", "base64");
 const image = join(output, "SYNTHETIC-saved.png");
@@ -126,11 +139,13 @@ try {
   await hasText("Your local gallery is empty");
   await click("Add Proof");
   await fill("Title", title, '[role="dialog"]');
-  await fill("Exact quote or evidence", quote, '[role="dialog"]');
+  await fill(/^Exact quote or evidence/, quote, '[role="dialog"]');
   await snapshot('[role="dialog"]');
   await browser("upload", '[role="dialog"] input[type="file"]', image);
   await hasText("Media validated and ready to save");
   await snapshot('[role="dialog"]');
+  // Native summary is a disclosure, omitted from this CLI's interactive button refs.
+  await browser("click", '[role="dialog"] .editor-details summary');
   // agent-browser 0.36.0 cannot reliably fill Chromium's segmented date widget.
   // Exercise the real input and React events, never app state or storage APIs.
   await browser("eval", `(() => { const input = document.querySelector('[role="dialog"] input[type="date"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '2026-08-30'); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true })); return input.value; })()`);
@@ -244,11 +259,11 @@ try {
   async function writeSyntheticSourceFile(name, marker) {
     return browser("eval", `(async () => {
       const root = await navigator.storage.getDirectory();
-      const folder = await root.getDirectoryHandle(${JSON.stringify(folderName)}, { create: true });
-      const file = await folder.getFileHandle(${JSON.stringify(name)}, { create: true });
+      const folder = await root.getDirectoryHandle(${scriptLiteral(folderName)}, { create: true });
+      const file = await folder.getFileHandle(${scriptLiteral(name)}, { create: true });
       const output = await file.createWritable();
-      const png = Uint8Array.from(atob(${JSON.stringify(png.toString("base64"))}), character => character.charCodeAt(0));
-      await output.write(new Blob([png, ${JSON.stringify(marker)}], { type: 'image/png' }));
+      const png = Uint8Array.from(atob(${scriptLiteral(png.toString("base64"))}), character => character.charCodeAt(0));
+      await output.write(new Blob([png, ${scriptLiteral(marker)}], { type: 'image/png' }));
       await output.close();
       window.showDirectoryPicker = async options => {
         if (options?.mode !== 'read') throw new Error('E2E only permits read-mode selection');
@@ -271,7 +286,7 @@ try {
   assert(!(await text()).includes(automaticName), "Automatic intake must not surface the saved evidence before requested retrieval");
   await click("Saved Proof");
   await hasText(automaticName);
-  const cardIndex = (await browser("eval", `Array.from(document.querySelectorAll('.gallery-grid > .proof-card')).findIndex(card => card.querySelector('h2')?.textContent === ${JSON.stringify(automaticName)})`)).result;
+  const cardIndex = (await browser("eval", `Array.from(document.querySelectorAll('.gallery-grid > .proof-card')).findIndex(card => card.querySelector('h2')?.textContent === ${scriptLiteral(automaticName)})`)).result;
   assert(cardIndex >= 0, "Automatically saved evidence must be in the gallery only after opening it");
   const automaticCard = `.gallery-grid > .proof-card:nth-child(${cardIndex + 1})`;
   const automaticText = (await browser("get", "text", automaticCard)).text;
@@ -310,11 +325,51 @@ try {
   await hasText(laterName);
   passed("Trusted Pause survives reload, explicit Resume collects new media, and Forget survives reload without deleting saved evidence");
 
+  await click("Add Proof");
+  const pastedNote = "SYNTHETIC pasted note: saw this tree on a walk. https://example.invalid/not-a-source";
+  await browser("click", '[role="dialog"] .editor-capture');
+  // Synthetic clipboard/drop events exercise rendered intake without reading or
+  // replacing the user's system clipboard. Native OS handoff remains a device check.
+  await browser("eval", `(() => { const transfer = new DataTransfer(); transfer.setData('text/plain', ${scriptLiteral(pastedNote)}); document.querySelector('[role="dialog"] .editor-capture').dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true })); return true; })()`);
+  assert.equal((await browser("eval", "document.querySelector('[role=dialog] textarea')?.value")).result, pastedNote);
+  const imageBase64 = (await readFile(image)).toString("base64");
+  await browser("eval", `(() => { const transfer = new DataTransfer(); transfer.items.add(new File([Uint8Array.from(atob(${scriptLiteral(imageBase64)}), c => c.charCodeAt(0))], 'SYNTHETIC-drop.png', { type: 'image/png' })); document.querySelector('[role="dialog"] .editor-capture').dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true })); return true; })()`);
+  await hasText("Media validated and ready to save");
+  const captureTitle = "SYNTHETIC · Captured without a date";
+  await fill("Title", captureTitle, '[role="dialog"]');
+  await select("Category", "creativity", '[role="dialog"]');
+  await click("Save Proof", '[role="dialog"]');
+  await hasText(captureTitle);
+  await select("Order", "recently_added");
+  assert.equal((await browser("eval", "document.querySelector('.gallery-grid .proof-card h2')?.textContent")).result, captureTitle);
+  assert((await browser("get", "text", ".gallery-grid .proof-card:first-child")).text.includes("MISSING"), "Capture must not invent a date or source from pasted content");
+  passed("Focused synthetic paste/drop preserves literal note and attachment; Recently added finds undated Proof without inventing dates");
+
+  await menu("Back up");
+  await browser("check", await reference("checkbox", "Download smaller recovery parts", ".backup-panel"));
+  await fill(/^Passphrase/, passphrase, ".backup-panel");
+  await fill("Repeat passphrase", passphrase, ".backup-panel");
+  const recoveryFile = join(downloads, "synthetic-recovery-part.proof");
+  await browser("download", await reference("button", "Download first recovery part", ".backup-panel"), recoveryFile);
+  await hasText("The encrypted recovery part was prepared for download.");
+  const recoveryBytes = await readFile(recoveryFile);
+  assert.equal(recoveryBytes.subarray(0, 8).toString(), "PROOFENC");
+  assert(!recoveryBytes.includes(Buffer.from(pastedNote)), "Recovery part must be encrypted");
+  await click("Close", ".backup-panel");
+  await menu("Restore");
+  await browser("upload", '.backup-panel input[type="file"]', recoveryFile);
+  await fill(/^Passphrase/, passphrase, ".backup-panel");
+  await actionWithDialog(() => click("Validate and restore", ".backup-panel"));
+  await hasText("Restored 0 saved Proof and 0 pending review items.");
+  await click("Close", ".backup-panel");
+  await hasText(captureTitle);
+  passed("Actual encrypted recovery-part download validates and restores as identical duplicates without changing saved Proof");
+
   await browser("screenshot", join(output, "completed.png"), "--full");
   const errors = await browser("errors");
   assert.equal(errors.errors?.length ?? 0, 0, `Browser errors: ${JSON.stringify(errors)}`);
   await writeFile(join(output, "receipt.json"), JSON.stringify({ target: target.href, session, receipts,
-    limitations: ["Native date input uses DOM setter plus real events", "Folder picker returns a genuine synthetic OPFS handle; not OS permission proof", "No native Photos/pairing proof", "Lexical search only; no external account or model"] }, null, 2));
+    limitations: ["Native date input uses DOM setter plus real events", "Clipboard/drop use synthetic DOM events, not the system clipboard or native OS share", "Folder picker returns a genuine synthetic OPFS handle; not OS permission proof", "No native Photos/pairing proof", "Lexical search only; no external account or model"] }, null, 2));
   console.log(`Browser E2E passed. Synthetic-only receipt and artifacts: ${output}`);
 } catch (error) {
   if (opened) {

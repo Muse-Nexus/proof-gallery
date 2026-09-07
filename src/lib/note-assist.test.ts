@@ -28,6 +28,46 @@ describe("local note organization", () => {
     expect(suggestNoteOrganization("word ".repeat(100)).title.length).toBe(100);
     expect(suggestNoteOrganization("maple oak pine birch cedar willow ash elm").tags).toHaveLength(6);
   });
+  it.each([
+    "I never finished that drawing.",
+    "I was not invited.",
+    "No award arrived.",
+    "I cannot finish the painting.",
+    "I haven't finished it.",
+    "They weren’t invited.",
+    "She hasn’t recovered.",
+    "The receipt was unpaid.",
+    "They rejected the song.",
+    "Without family, I finished it.",
+  ])("does not detach suggested tags from a negated sentence: %s", note => {
+    expect(suggestNoteOrganization(note)).toEqual({ title: note, category: null, cue: null, tags: [] });
+  });
+  it.each([". ", "! ", "? ", ".\n", ".\r\n"])("keeps tags from separate unnegated sentences using %j", separator => {
+    const note = `I never finished that drawing${separator}A river walk.`;
+    expect(suggestNoteOrganization(note).tags).toEqual(["river", "walk"]);
+  });
+  it.each(["\n", "\r\n", "\r"])("keeps wrapped negation attached to category and tag cues using %j", lineBreak => {
+    for (const note of [
+      `I was not${lineBreak}invited.`,
+      `I never${lineBreak}finished the project.`,
+      `I haven’t${lineBreak}finished that drawing.`,
+    ]) {
+      expect(suggestNoteOrganization(note)).toMatchObject({ category: null, cue: null, tags: [] });
+    }
+    expect(suggestNoteOrganization(`My sister${lineBreak}invited me.`)).toMatchObject({
+      category: "belonging", tags: ["sister", "invited"],
+    });
+  });
+  it("conservatively omits suggestions across an unpunctuated line break", () => {
+    expect(suggestNoteOrganization("I never finished that drawing\nA river walk.")).toMatchObject({
+      category: null, cue: null, tags: [],
+    });
+  });
+  it("keeps literal affirmative tags even when category cues conflict", () => {
+    expect(suggestNoteOrganization("Finished the drawing.")).toMatchObject({
+      category: null, tags: ["finished", "drawing"],
+    });
+  });
 });
 describe("source-bound connections and stories", () => {
   it("matches meaningful words only inside the same owner's saved Proof", () => {

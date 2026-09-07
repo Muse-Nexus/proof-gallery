@@ -165,6 +165,9 @@ struct CompanionView: View {
 
 private struct PhotoContextView: View {
     let context: LocalPhotoContext
+    @State private var draft = LocalReviewDraft()
+    @State private var editingDraft = false
+    @State private var draftCopied = false
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("\(context.pixelWidth) × \(context.pixelHeight) pixels").font(.caption2).foregroundStyle(.secondary)
@@ -177,6 +180,28 @@ private struct PhotoContextView: View {
                     Text("May be wrong or incomplete. Check the image before using any words as a quote. This text is not exported.")
                         .font(.caption2).foregroundStyle(.secondary)
                     Text(context.recognizedText).font(.caption).textSelection(.enabled)
+                    if !editingDraft {
+                        Button("Use text in a review note") {
+                            if draft.useMachineReadText(context) { editingDraft = true; draftCopied = false }
+                        }
+                    } else {
+                        Text("Review-note draft · unverified").font(.caption).bold()
+                        Text("Edit while checking the image. Nothing here is saved or included in the review-file export. Copy, then paste into the photo’s short note in Proof Gallery.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                        TextEditor(text: $draft.text)
+                            .font(.caption).frame(minHeight: 90)
+                            .accessibilityLabel("Unverified review-note draft")
+                            .onChange(of: draft.text) { _, _ in draftCopied = false }
+                        Text("\(draft.text.count) / \(LocalReviewDraft.maximumCharacters) characters")
+                            .font(.caption2).foregroundColor(draft.text.count > LocalReviewDraft.maximumCharacters ? .red : .secondary)
+                        Button(draftCopied ? "Draft copied" : "Copy review note") {
+                            guard let text = draft.clipboardText else { return }
+                            NSPasteboard.general.clearContents()
+                            draftCopied = NSPasteboard.general.setString(text, forType: .string)
+                        }.disabled(draft.clipboardText == nil)
+                        Text("Copy includes an unverified-draft label. Your system clipboard may sync to other devices; copy only if that is okay. This draft disappears when its photo leaves this view or the app closes.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                 }.font(.caption)
             case .notFound: Text("No text detected; the photo may still matter.").font(.caption2).foregroundStyle(.secondary)
             case .unavailable: Text("Text recognition unavailable; image retained.").font(.caption2).foregroundStyle(.secondary)

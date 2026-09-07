@@ -34,3 +34,19 @@ it("bounds streamed responses even without a content-length", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array(64 * 1024 * 1024 + 1)); controller.close(); } })));
   await expect(receiveCompanionReview(session)).rejects.toThrow("size limit");
 });
+it("uses literal source context for requested matching but never adds it to story evidence", async () => {
+  const sourced = { ...item, source: "Synthetic source detail", provenance: { import_receipt: {
+    method: "trusted_folder", source_id: "11111111-1111-4111-8111-111111111111", source_revision: "22222222-2222-4222-8222-222222222222",
+    source_label: "Synthetic Juniper outings", source_approved_at: "2026-09-06T00:00:00.000Z", automatically_saved_at: "2026-09-06T00:00:00.000Z",
+    original_filename: "synthetic.png", mime_type: "image/png", sha256: "a".repeat(64), source_category: "creativity", source_tags: [],
+  } } };
+  const network = respond({ ids: [item.id] });
+  await semanticCompanionSearch(session, "Juniper", [sourced]);
+  const request = JSON.parse(network.mock.calls[0][1]!.body as string);
+  expect(request.sources[0].text).toContain(sourced.source);
+  expect(request.sources[0].text).toContain("Synthetic Juniper outings");
+  network.mockClear();
+  network.mockResolvedValue(new Response(JSON.stringify({ excerpts: [{ sourceID: item.id, exactExcerpt: item.evidenceText }] })));
+  await draftCompanionStory(session, [sourced]);
+  expect(JSON.parse(network.mock.calls[0][1]!.body as string).sources[0].text).toBe(item.evidenceText);
+});

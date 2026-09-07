@@ -10,9 +10,24 @@ Open the [gallery](https://proof-gallery-9jn.pages.dev/) and choose **Start in
 this browser**. Use the same profile each time. Local evidence belongs to that
 profile, not an account, and active storage is not encrypted.
 
-Choose **Add Proof** for a note, exact message, or individual image. Keep the
-words as written. Add the date and source if known, and choose a category that
-helps you find it. Leave unknown details blank.
+Choose **Add Proof** and start with a short note or exact message. Keep the
+words as written. Optional word-based suggestions can supply a title, category,
+and tags from your note; these are organization aids, not an AI interpretation.
+Edit any suggestion, or turn them off. Fields you edit—including tags you
+remove—will not be replaced as you continue writing. Ambiguous wording leaves
+the category for you to choose.
+
+You can also select an individual image, or focus **Paste or drop evidence here**
+and paste an image or plain text. Dropping one attachment there works too. Text
+is appended to the note as pasted; a link is only text and is never downloaded.
+The app does not inspect your clipboard in the background or intercept pasting
+into other fields. Use **Photos & media** for a batch.
+
+Open **Date, source & other details** when you know more. Dates, senders, people,
+and sources are never guessed from a pasted message, link, or filename. Unknown
+source details stay blank and source type stays **Other** until you choose it.
+An image alone can be saved in browser-local mode with a title and category;
+its filename can supply the title, not an event date or meaning.
 
 The editor checks your selected attachment before enabling Save. Choosing a
 different file replaces that pending choice; canceling the editor stops it.
@@ -25,6 +40,11 @@ in your words; the app does not decide why you cried or what the image proves.
 Save the note, choose a category, and save selected items into your gallery.
 
 ## Make the next addition easier
+
+You can [install Proof](INSTALLATION.md) for an app icon and offline access to
+the browser-local gallery after its public app files are prepared. Installation
+does not sync, back up, or grant background access to anything. OS “Share to
+Proof” is not enabled; use the explicit picker, paste, or drop instead.
 
 Choose a dedicated screenshot or photo-export folder in the **folder source**
 and start checking. New media arrives in review by default while the gallery is

@@ -15,6 +15,7 @@ import { parseCompanionPackage, validateCompanionReceipt, type CompanionReceipt 
 import type { ProofSearchResult } from "./proof-api";
 import { MAX_FULL_BACKUP_BYTES } from "./encrypted-backup";
 import type { ProofFolder } from "./folder-source";
+import { getTrustedSourceContext } from "./source-context";
 
 export const LOCAL_PROOF_OWNER_ID = "local-browser-owner";
 
@@ -35,6 +36,16 @@ const CHANGE_CHANNEL_NAME = "muse-nexus-proof-gallery-local-changes-v1";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SAFE_IMAGE_TYPES = LOCAL_MEDIA_TYPES;
+
+export const LOCAL_PROOF_STORAGE_LIMITS = {
+  savedBytes: MAX_BACKUP_IMAGE_BYTES, pendingBytes: MAX_BACKUP_IMAGE_BYTES,
+  savedCount: MAX_BACKUP_ITEMS, pendingCount: 100,
+} as const;
+export type LocalProofStorageUsage = {
+  savedBytes: number; pendingBytes: number; savedCount: number; pendingCount: number;
+  limits: typeof LOCAL_PROOF_STORAGE_LIMITS;
+  warnings: string[];
+};
 
 type LocalProofRecord = {
   id: string;
@@ -736,11 +747,52 @@ async function allRecords(): Promise<LocalProofRecord[]> {
   return (values as unknown[]).map(validateStoredRecord);
 }
 
+function savedUsage(records: readonly LocalProofRecord[]) {
+  return { bytes: records.reduce((sum, item) => sum + (item.imageBlob?.size ?? 0), 0), count: records.length };
+}
+
+function assertSavedCapacity(before: { bytes: number; count: number }, after: { bytes: number; count: number }): void {
+  if ((after.bytes > MAX_BACKUP_IMAGE_BYTES || after.count > MAX_BACKUP_ITEMS) &&
+      (after.bytes > before.bytes || after.count > before.count)) {
+    throw new Error("Saved Proof is full (10,000 items or 48 MiB of media). Nothing was saved. Download encrypted recovery parts before removing anything; existing items can still be edited without adding media, shrunk, or deleted.");
+  }
+}
+
+/** Aggregate metadata only; no evidence text or preview URLs are returned. */
+export async function getLocalProofStorageUsage(): Promise<LocalProofStorageUsage> {
+  const db = await openDatabase();
+  const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readonly");
+  const [savedRows, pendingRows] = await Promise.all([
+    requestResult(tx.objectStore(ITEM_STORE).getAll()), requestResult(tx.objectStore(CANDIDATE_STORE).getAll()), transactionComplete(tx),
+  ]);
+  const saved = savedUsage(savedRows.map(validateStoredRecord));
+  const pending = pendingRows.map(validateCandidate);
+  const usage = { savedBytes: saved.bytes, savedCount: saved.count,
+    pendingBytes: pending.reduce((sum, item) => sum + item.blob.size, 0), pendingCount: pending.length };
+  const warnings: string[] = [];
+  for (const [key, limit] of Object.entries(LOCAL_PROOF_STORAGE_LIMITS) as [keyof typeof usage, number][]) {
+    if (usage[key] > limit) warnings.push(`${key.startsWith("saved") ? "Saved Proof" : "Pending review"} exceeds the safe ${key.endsWith("Bytes") ? "media" : "item"} limit. Download encrypted recovery parts before removing anything.`);
+    else if (usage[key] >= limit * 0.9) warnings.push(`${key.startsWith("saved") ? "Saved Proof" : "Pending review"} is near its ${key.endsWith("Bytes") ? "media" : "item"} limit.`);
+  }
+  return { ...usage, limits: LOCAL_PROOF_STORAGE_LIMITS, warnings };
+}
+
 async function addRecord(record: LocalProofRecord): Promise<void> {
   const database = await openDatabase();
-  const transaction = database.transaction(ITEM_STORE, "readwrite");
-  const addPromise = requestResult(transaction.objectStore(ITEM_STORE).add(record));
-  await Promise.all([addPromise, transactionComplete(transaction)]);
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(ITEM_STORE, "readwrite");
+    let failure: unknown;
+    const request = transaction.objectStore(ITEM_STORE).getAll();
+    request.onsuccess = () => {
+      try {
+        const before = savedUsage(request.result.map(validateStoredRecord));
+        assertSavedCapacity(before, { bytes: before.bytes + (record.imageBlob?.size ?? 0), count: before.count + 1 });
+        transaction.objectStore(ITEM_STORE).add(record);
+      } catch (error) { failure = error; transaction.abort(); }
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = transaction.onabort = () => reject(failure ?? transaction.error ?? new Error("Local Proof save failed"));
+  });
 }
 
 function nextTimestamp(previous: string): string {
@@ -769,16 +821,17 @@ async function checkedUpdate(
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(ITEM_STORE, "readwrite");
     const store = transaction.objectStore(ITEM_STORE);
-    const request = store.get(existing.id);
+    const request = store.getAll();
     let nextRecord: LocalProofRecord | null = null;
     let explicitError: unknown = null;
 
     request.onsuccess = () => {
       try {
-        if (request.result === undefined) {
+        const records = request.result.map(validateStoredRecord);
+        const current = records.find(record => record.id === existing.id);
+        if (current === undefined) {
           throw new Error("Proof changed in another tab. Reload before editing it.");
         }
-        const current = validateStoredRecord(request.result);
         if (current.updatedAt !== existing.updatedAt) {
           throw new Error("Proof changed in another tab. Reload before editing it.");
         }
@@ -815,6 +868,9 @@ async function checkedUpdate(
               ? null
               : current.imageDigest,
         };
+        const before = savedUsage(records);
+        assertSavedCapacity(before, { count: before.count,
+          bytes: before.bytes - (current.imageBlob?.size ?? 0) + (nextRecord.imageBlob?.size ?? 0) });
         store.put(nextRecord);
       } catch (error) {
         explicitError = error;
@@ -1069,6 +1125,7 @@ function lexicalScore(record: LocalProofRecord, query: string): number {
     { value: searchable(record.title), weight: 8 },
     { value: searchable(record.evidenceText), weight: 6 },
     { value: searchable(record.source ?? ""), weight: 5 },
+    { value: searchable(getTrustedSourceContext(record.provenance)), weight: 5 },
     { value: searchable(record.tags.join(" ")), weight: 5 },
     { value: searchable(record.person ?? ""), weight: 4 },
     { value: searchable(record.project ?? ""), weight: 4 },
@@ -1602,58 +1659,42 @@ async function insertNonConflictingRecords(
     const inserted: LocalProofRecord[] = [];
     let pendingImported = 0;
     let explicitError: unknown = null;
-
-    for (const record of records) {
-      const cross = pendingStore.get(record.id);
-      cross.onsuccess = () => {
-        if (cross.result !== undefined && !explicitError) {
-          explicitError = new Error("Backup conflicts with a pending review item; nothing was imported.");
-          transaction.abort();
-        }
-      };
-      const request = store.get(record.id);
-      request.onsuccess = () => {
-        if (explicitError) return;
-        try {
-          if (request.result === undefined) {
-            store.add(record);
-            inserted.push(record);
-            return;
-          }
-          const current = validateStoredRecord(request.result);
-          if (!recordsAreIdentical(current, record)) {
-            throw new Error(
-              `Proof backup conflicts with the existing item ${record.id}; nothing was imported`,
-            );
-          }
-        } catch (error) {
-          explicitError = error;
-          transaction.abort();
-        }
-      };
-      request.onerror = () => {
-        explicitError ??= request.error;
-      };
-    }
-
-    // Read the complete pending store to enforce limits across existing and restored data.
+    const allSaved = store.getAll();
     const allPending = pendingStore.getAll();
-    allPending.onsuccess = () => {
-      if (explicitError) return;
+    let savedRows: LocalProofRecord[] | null = null;
+    let pendingRows: CandidateRecord[] | null = null;
+    const insert = () => {
+      if (!savedRows || !pendingRows || explicitError) return;
       try {
-        const current = new Map(allPending.result.map((row) => { const item = validateCandidate(row); return [item.id, item]; }));
-        for (const candidate of candidates) {
-          const existing = current.get(candidate.id);
-          if (existing && stableJson(canonicalCandidate(existing)) !== stableJson(canonicalCandidate(candidate))) throw new Error("Backup conflicts with existing review details; nothing was imported.");
-          if (!existing) { current.set(candidate.id, candidate); pendingImported++; pendingStore.add(candidate); }
-          const cross = store.get(candidate.id);
-          cross.onsuccess = () => {
-            if (cross.result !== undefined && !explicitError) { explicitError = new Error("Backup conflicts with saved Proof; nothing was imported."); transaction.abort(); }
-          };
+        const saved = new Map(savedRows.map(record => [record.id, record]));
+        const pending = new Map(pendingRows.map(record => [record.id, record]));
+        const newPending: CandidateRecord[] = [];
+        for (const record of records) {
+          if (pending.has(record.id)) throw new Error("Backup conflicts with a pending review item; nothing was imported.");
+          const existing = saved.get(record.id);
+          if (existing && !recordsAreIdentical(existing, record)) throw new Error(`Proof backup conflicts with the existing item ${record.id}; nothing was imported`);
+          if (!existing) { saved.set(record.id, record); inserted.push(record); }
         }
-        if (current.size > 100 || [...current.values()].reduce((sum, item) => sum + item.blob.size, 0) > MAX_BACKUP_IMAGE_BYTES) throw new Error("Restored review inbox would exceed 100 items or 48 MiB; nothing was imported.");
+        for (const candidate of candidates) {
+          if (saved.has(candidate.id)) throw new Error("Backup conflicts with saved Proof; nothing was imported.");
+          const existing = pending.get(candidate.id);
+          if (existing && stableJson(canonicalCandidate(existing)) !== stableJson(canonicalCandidate(candidate))) throw new Error("Backup conflicts with existing review details; nothing was imported.");
+          if (!existing) { pending.set(candidate.id, candidate); newPending.push(candidate); }
+        }
+        assertSavedCapacity(savedUsage(savedRows), savedUsage([...saved.values()]));
+        const beforePendingBytes = pendingRows.reduce((sum, item) => sum + item.blob.size, 0);
+        const pendingBytes = [...pending.values()].reduce((sum, item) => sum + item.blob.size, 0);
+        if ((pending.size > 100 || pendingBytes > MAX_BACKUP_IMAGE_BYTES) &&
+            (pending.size > pendingRows.length || pendingBytes > beforePendingBytes)) {
+          throw new Error("Restored review inbox would exceed 100 items or 48 MiB; nothing was imported.");
+        }
+        for (const record of inserted) store.add(record);
+        for (const candidate of newPending) pendingStore.add(candidate);
+        pendingImported = newPending.length;
       } catch (error) { explicitError = error; transaction.abort(); }
     };
+    allSaved.onsuccess = () => { try { savedRows = allSaved.result.map(validateStoredRecord); insert(); } catch (error) { explicitError = error; transaction.abort(); } };
+    allPending.onsuccess = () => { try { pendingRows = allPending.result.map(validateCandidate); insert(); } catch (error) { explicitError = error; transaction.abort(); } };
 
     transaction.oncomplete = () => resolve({ inserted, pendingImported });
     transaction.onerror = () =>
@@ -1983,6 +2024,138 @@ export async function exportLocalProofFullBackup(): Promise<Blob> {
   return result;
 }
 
+export type LocalProofBackupPart = {
+  exportId: string;
+  createdAt: string;
+  part: number;
+  totalParts: number;
+  isLast: boolean;
+  blob: Blob;
+  savedCount: number;
+  pendingCount: number;
+};
+
+type RecoveryEntry = { store: typeof ITEM_STORE | typeof CANDIDATE_STORE; id: string; revision: string; bytes: number; mediaBytes: number };
+type RecoveryPlan = { entries: RecoveryEntry[]; savedCount: number; pendingCount: number; bytes: number; mediaBytes: number };
+const RECOVERY_PART_BYTES = 32 * 1024 * 1024;
+const RECOVERY_PART_MEDIA_BYTES = 24 * 1024 * 1024;
+
+function recoveryRevision(record: LocalProofRecord | CandidateRecord): string {
+  return "updatedAt" in record
+    ? JSON.stringify([record.updatedAt, record.imageRevision, record.imageDigest])
+    : JSON.stringify([record.revision, record.digest]);
+}
+
+/** Plans contain IDs/revisions only; do not keep an oversized collection's text or media in memory. */
+async function recoveryPlan(signal?: AbortSignal): Promise<RecoveryPlan[]> {
+  signal?.throwIfAborted();
+  const db = await openDatabase();
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readonly");
+    const plans: RecoveryPlan[] = [];
+    let current: RecoveryPlan = { entries: [], savedCount: 0, pendingCount: 0, bytes: 1024, mediaBytes: 0 };
+    let failure: unknown;
+    const abort = (error: unknown) => { failure = error; try { tx.abort(); } catch { /* Already settled. */ } };
+    const cancel = () => abort(new DOMException("Recovery export canceled", "AbortError"));
+    signal?.addEventListener("abort", cancel, { once: true });
+    const append = (entry: RecoveryEntry) => {
+      if (entry.bytes + 1024 > MAX_FULL_BACKUP_BYTES) throw new Error("One record exceeds the 144 MiB archive limit and cannot be split without changing its evidence. Original data is unchanged.");
+      if (current.entries.length && (current.bytes + entry.bytes > RECOVERY_PART_BYTES ||
+          current.mediaBytes + entry.mediaBytes > RECOVERY_PART_MEDIA_BYTES ||
+          (entry.store === ITEM_STORE && current.savedCount >= 1000) ||
+          (entry.store === CANDIDATE_STORE && current.pendingCount >= 100))) {
+        plans.push(current);
+        current = { entries: [], savedCount: 0, pendingCount: 0, bytes: 1024, mediaBytes: 0 };
+      }
+      current.entries.push(entry); current.bytes += entry.bytes; current.mediaBytes += entry.mediaBytes;
+      if (entry.store === ITEM_STORE) current.savedCount++; else current.pendingCount++;
+    };
+    for (const storeName of [ITEM_STORE, CANDIDATE_STORE] as const) {
+      const request = tx.objectStore(storeName).openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        try {
+          signal?.throwIfAborted();
+          if (storeName === ITEM_STORE) {
+            const record = validateStoredRecord(cursor.value);
+            const mediaBytes = record.imageBlob?.size ?? 0;
+            const body = backupItemBody(record, record.imageBlob ? {
+              name: record.imageName!, type: record.imageBlob.type, size: mediaBytes,
+              integritySha256: record.imageDigest!, base64: "",
+            } : null);
+            const bytes = new TextEncoder().encode(JSON.stringify({ ...body,
+              integrity: { purpose: "corruption-detection", algorithm: "SHA-256", sha256: "0".repeat(64) } })).byteLength +
+              4 * Math.ceil(mediaBytes / 3) + 1;
+            append({ store: storeName, id: record.id, revision: recoveryRevision(record), bytes, mediaBytes });
+          } else {
+            const record = validateCandidate(cursor.value);
+            const { blob, ...rest } = record;
+            const bytes = new TextEncoder().encode(JSON.stringify({ ...rest,
+              media: { name: record.fileName, type: blob.type, size: blob.size, integritySha256: record.digest, base64: "" } })).byteLength +
+              4 * Math.ceil(blob.size / 3) + 1;
+            append({ store: storeName, id: record.id, revision: recoveryRevision(record), bytes, mediaBytes: blob.size });
+          }
+          cursor.continue();
+        } catch (error) { abort(error); }
+      };
+    }
+    tx.oncomplete = () => {
+      signal?.removeEventListener("abort", cancel);
+      if (current.entries.length || !plans.length) plans.push(current);
+      resolve(plans);
+    };
+    tx.onerror = tx.onabort = () => { signal?.removeEventListener("abort", cancel); reject(failure ?? tx.error ?? new Error("Recovery export could not be planned")); };
+  });
+}
+
+/**
+ * Recovery for legacy oversized collections, streamed one independently restorable
+ * v3 archive at a time. Callers encrypt each Blob before offering a download.
+ * No grant or handle is exported. A canceled/changed export never mutates data.
+ */
+export async function* exportLocalProofBackupParts(signal?: AbortSignal): AsyncGenerator<LocalProofBackupPart> {
+  const exportId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const plans = await recoveryPlan(signal);
+  for (const [index, plan] of plans.entries()) {
+    signal?.throwIfAborted();
+    const db = await openDatabase();
+    signal?.throwIfAborted();
+    const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readonly");
+    const reads = plan.entries.map(entry => requestResult(tx.objectStore(entry.store).get(entry.id)));
+    const [rows] = await Promise.all([Promise.all(reads), transactionComplete(tx)]);
+    signal?.throwIfAborted();
+    const items: BackupItem[] = [];
+    const pending = [];
+    for (const [rowIndex, row] of rows.entries()) {
+      signal?.throwIfAborted();
+      const entry = plan.entries[rowIndex];
+      if (!row) throw new Error("Proof changed during recovery export. Keep any downloaded parts, then start a new complete export. Nothing was removed.");
+      const record = entry.store === ITEM_STORE ? validateStoredRecord(row) : validateCandidate(row);
+      if (recoveryRevision(record) !== entry.revision) throw new Error("Proof changed during recovery export. Keep any downloaded parts, then start a new complete export. Nothing was removed.");
+      if ("imageBlob" in record) {
+        const body = backupItemBody(record, await backupImage(record));
+        items.push({ ...body, integrity: await itemIntegrityReceipt(body) });
+      } else {
+        const { blob, ...rest } = record;
+        if (await sha256(blob) !== record.digest) throw new Error("Pending media integrity check failed. Nothing was removed.");
+        pending.push({ ...rest, media: { name: record.fileName, type: blob.type, size: blob.size,
+          integritySha256: record.digest, base64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) } });
+      }
+    }
+    const blob = new Blob([JSON.stringify({ format: BACKUP_FORMAT, version: 3, encryption: "none",
+      exportedAt: createdAt, items, pending })], { type: "application/json" });
+    if (blob.size > MAX_FULL_BACKUP_BYTES || (plan.entries.length > 1 && blob.size > RECOVERY_PART_BYTES)) {
+      throw new Error("Recovery part exceeds its safe size. Original data is unchanged.");
+    }
+    signal?.throwIfAborted();
+    yield { exportId, createdAt, part: index + 1, totalParts: plans.length, isLast: index === plans.length - 1,
+      blob, savedCount: items.length, pendingCount: pending.length };
+  }
+}
+
 export async function listLocalProofCandidates(): Promise<LocalProofCandidate[]> {
   const db = await openDatabase();
   const tx = db.transaction(CANDIDATE_STORE, "readonly");
@@ -2134,6 +2307,17 @@ export async function resolveLocalProofCandidates(
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([ITEM_STORE, CANDIDATE_STORE], "readwrite");
     let failure: unknown;
+    let approvalUsage: { bytes: number; count: number } | null = null;
+    let approvedBytes = 0;
+    let approvedCount = 0;
+    if (action === "approve") {
+      // Queued before candidate reads; all requests share one serial transaction.
+      const saved = tx.objectStore(ITEM_STORE).getAll();
+      saved.onsuccess = () => {
+        try { approvalUsage = savedUsage(saved.result.map(validateStoredRecord)); }
+        catch (error) { failure = error; tx.abort(); }
+      };
+    }
     for (const entry of entries) {
       const request = tx.objectStore(CANDIDATE_STORE).get(entry.candidate.id);
       request.onsuccess = () => {
@@ -2162,6 +2346,11 @@ export async function resolveLocalProofCandidates(
                 approved_at: timestamp,
               } },
             };
+            if (!approvalUsage) throw new Error("Saved Proof capacity could not be checked; nothing was approved.");
+            approvedBytes += verified.blob.size;
+            approvedCount++;
+            assertSavedCapacity(approvalUsage, { bytes: approvalUsage.bytes + approvedBytes,
+              count: approvalUsage.count + approvedCount });
             tx.objectStore(ITEM_STORE).add(validateStoredRecord(record));
           }
           if (action === "edit") {

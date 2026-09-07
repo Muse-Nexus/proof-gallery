@@ -128,6 +128,10 @@ The [synthetic browser suite](docs/E2E.md) covers add/edit/search, private revie
 encrypted recovery, and trusted-folder consent in an isolated local browser.
 Read its setup and device-verification limits before running it.
 
+The [everyday-access release notes](docs/EVERYDAY_ACCESS.md) describe note-first
+capture, recently added sorting, source-context matching, recovery parts, and
+the separate assistant/installation/native permission boundaries.
+
 Native changes also need `swift test` and the checks in
 [the companion guide](docs/COMPANION.md). Database changes need the isolated
 two-owner integration tests in `.github/workflows/ci.yml`. Never point fixture
