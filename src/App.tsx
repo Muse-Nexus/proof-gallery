@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { NativeVaultGallery } from "./components/NativeVaultGallery";
 import { AuthPanel } from "./components/AuthPanel";
 import { DecorativeVisual } from "./components/DecorativeVisual";
 import { ProofCard } from "./components/ProofCard";
@@ -69,9 +70,11 @@ function initialStorageMode(): StorageMode | null {
 function LocalStart({
   onUseLocal,
   onUseHosted,
+  onNative,
 }: {
   onUseLocal: () => void;
   onUseHosted?: () => void;
+  onNative: () => void;
 }) {
   return (
     <main className="landing-shell">
@@ -121,6 +124,7 @@ function LocalStart({
               See how it works
             </a>
           </div>
+          <button className="text-button" type="button" onClick={onNative}>Connect native vault</button>
           <p id="local-storage-disclosure" className="local-start-disclosure">
             Stored in this browser profile. Not synced or encrypted by Proof
             Gallery. Clearing site data can erase it; export a private backup.
@@ -259,12 +263,14 @@ function Gallery({
   ownerId,
   storageMode,
   onVisitLanding,
+  onNative,
   onSwitchMode,
   onSignOut,
 }: {
   ownerId: string;
   storageMode: StorageMode;
   onVisitLanding: () => void;
+  onNative: () => void;
   onSwitchMode?: () => void;
   onSignOut?: () => void;
 }) {
@@ -677,6 +683,7 @@ function Gallery({
               </button>
             </>
           )}
+          <button className="text-button" type="button" onClick={onNative} disabled={editingBlocked || Boolean(editor || backupMode || storySeedId) || showMediaInbox}>Connect native vault</button>
           <button className="text-button" type="button" onClick={onVisitLanding} disabled={busy || mediaDirty}>
             About
           </button>
@@ -952,7 +959,7 @@ function Gallery({
   );
 }
 
-export default function App() {
+function BrowserGalleryApp({ onNative }: { onNative: () => void }) {
   const [storageMode, setStorageMode] = useState<StorageMode | null>(
     initialStorageMode,
   );
@@ -991,6 +998,7 @@ export default function App() {
     return (
       <LocalStart
         onUseLocal={() => chooseStorageMode("local")}
+        onNative={onNative}
         onUseHosted={
           isConfigured ? () => chooseStorageMode("hosted") : undefined
         }
@@ -1004,6 +1012,7 @@ export default function App() {
         ownerId={LOCAL_PROOF_OWNER_ID}
         storageMode="local"
         onVisitLanding={() => setStorageMode(null)}
+        onNative={onNative}
         onSwitchMode={
           isConfigured ? () => chooseStorageMode("hosted") : undefined
         }
@@ -1020,8 +1029,15 @@ export default function App() {
       ownerId={session.user.id}
       storageMode="hosted"
       onVisitLanding={() => setStorageMode(null)}
+      onNative={onNative}
       onSwitchMode={() => chooseStorageMode("local")}
       onSignOut={() => void getSupabase().auth.signOut()}
     />
   );
+}
+
+export default function App() {
+  const [native, setNative] = useState(false);
+  if (native) return <NativeVaultGallery onExit={() => setNative(false)} />;
+  return <BrowserGalleryApp onNative={() => setNative(true)} />;
 }
