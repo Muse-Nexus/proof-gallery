@@ -162,4 +162,5 @@ if ! run_notarize "$companion_test_hash" clean; then
 fi
 [[ -e "$companion_test_staple_marker" ]]
 [[ -f "$companion_test_release/release-sha256.txt" ]]
+bash "$(dirname "$0")/test-build-safety.sh"
 printf '%s\n' 'Release safety checks passed.'
