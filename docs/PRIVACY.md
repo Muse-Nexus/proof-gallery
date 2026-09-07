@@ -18,7 +18,8 @@ Photos scope or immediate-files-only folder defaults to pending review. Explicit
 trusted-source approval may save new validated images with owner-chosen category
 and tags; it does not approve existing candidates or infer emotional meaning.
 Originals are never edited. Background collection runs only while the authorized
-companion process is running; shutdown/sleep does not collect missed work.
+companion process is running. No reads occur while the Mac is shut down or asleep;
+a later bounded source check does not widen the selected scope.
 
 Gallery grants permit review/CRUD/media for 24 hours. Assistant grants permit
 saved text only for 30 days. Search is restricted to saved Proof in this native
