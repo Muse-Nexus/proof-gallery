@@ -120,6 +120,7 @@ try {
   }
   await until(async () => { try { return (await fetch(target, { redirect: "error" })).ok; } catch { return false; } }, `Local server unavailable: ${serverLog}`, 20_000);
   opened = true; await browser("open", target.href);
+  await browser("set", "viewport", "1280", "900");
   await browser("set", "media", "light", "reduced-motion");
   await click("Start in this browser");
   await hasText("Your local gallery is empty");
@@ -144,8 +145,13 @@ try {
   await hasText(source);
   const dateLabel = (await browser("eval", `new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date('2026-08-30T00:00:00Z'))`)).result;
   await hasText(dateLabel);
-  const imageStatus = await browser("eval", 'Array.from(document.querySelectorAll(".proof-card img")).map(image => ({ loaded: image.complete && image.naturalWidth > 0, url: image.src.startsWith("blob:") }))');
-  assert(imageStatus.result?.length > 0 && imageStatus.result.every(value => value.loaded && value.url), "Saved attachment must reload as an actual browser blob image");
+  // Media resolves its blob asynchronously and the image is deliberately lazy.
+  // Put the saved card in view, then wait for decoding, not just the note text.
+  await browser("scrollintoview", ".gallery-grid > .proof-card");
+  await until(async () => {
+    const imageStatus = await browser("eval", 'Array.from(document.querySelectorAll(".proof-card img")).map(image => ({ loaded: image.complete && image.naturalWidth > 0, url: image.src.startsWith("blob:") }))');
+    return imageStatus.result?.length > 0 && imageStatus.result.every(value => value.loaded && value.url);
+  }, "Saved attachment must reload as an actual decoded browser blob image");
   await click("Edit");
   await fill("Title", editedTitle, '[role="dialog"]');
   await click("Save Proof", '[role="dialog"]');
@@ -313,7 +319,11 @@ try {
 } catch (error) {
   if (opened) {
     try { await browser("screenshot", join(output, "failure.png"), "--full"); } catch { /* Preserve original failure. */ }
-    try { await writeFile(join(output, "failure-snapshot.json"), JSON.stringify(await snapshot(), null, 2)); } catch { /* Preserve original failure. */ }
+    try {
+      const state = await snapshot();
+      await writeFile(join(output, "failure-snapshot.json"), JSON.stringify(state, null, 2));
+      console.error(`Synthetic failure snapshot: ${state.snapshot}`);
+    } catch { /* Preserve original failure. */ }
     try { await writeFile(join(output, "failure-text.txt"), await text()); } catch { /* Preserve original failure. */ }
   }
   console.error(`Browser E2E failed. Synthetic-only artifacts: ${output}`);

@@ -47,6 +47,7 @@ personal media into its fixtures.
 
 - Add an actual PNG attachment, exact quote, source, date, category, and tags.
 - Reload and check persisted fields and a decoded blob-image preview.
+  The card is brought into view and decoding is awaited, including lazy media.
 - Edit, filter by category/tag, run lexical search, and open a source-faithful
   story reading.
 - Save a pending-media note without making it searchable as saved Proof.
