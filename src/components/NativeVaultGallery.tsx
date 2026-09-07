@@ -152,21 +152,21 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
     });
   }
   return <main className="app-shell native-vault">
-    <header><h1>Native vault on this Mac</h1><p>A separate collection kept by the companion. This connection does not import or merge your browser collection.</p>
-      <button onClick={() => { if (confirmDiscardDraft()) { disconnect(); onExit(); } }}>Return to browser gallery</button>
-      {info && <button onClick={() => disconnect()}>Disconnect native vault</button>}
+    <header className="native-header"><span className="privacy-badge">Same Mac · private connection</span><h1>Native vault on this Mac</h1><p>A separate collection kept by the companion. This connection does not import or merge your browser collection.</p>
+      <div className="native-actions"><button onClick={() => { if (confirmDiscardDraft()) { disconnect(); onExit(); } }}>Return to browser gallery</button>
+      {info && <button onClick={() => disconnect()}>Disconnect native vault</button>}</div>
     </header>
-    <p>Native storage is local to this OS account and is not encrypted by Proof. Browser backups do not include it. Hiding this page hides evidence and keeps your unsaved draft only in memory. Returning requires permission and an explicit resume. Leaving discards the draft.</p>
-    {message && <p role="status">{message}</p>}
-    {!info && !hidden && <form onSubmit={connect} autoComplete="off">
+    <p className="native-privacy">Native storage is local to this OS account and is not encrypted by Proof. Browser backups do not include it. Hiding this page hides evidence and keeps your unsaved draft only in memory. Returning requires permission and an explicit resume. Leaving discards the draft.</p>
+    {message && <p className="native-status" role="status">{message}</p>}
+    {!info && !hidden && <form className="native-connect" onSubmit={connect} autoComplete="off">
       <label>Native gallery connection code<input type="password" value={code} onChange={e => setCode(e.target.value)} autoComplete="off" spellCheck={false} maxLength={110} disabled={busy} /></label>
       <p>Create a gallery permission in the native companion, then paste its code here. The code lasts only in this page’s memory. Do not paste an assistant token.</p>
       <button type="submit" disabled={busy || !code.trim()}>Connect native vault</button>
     </form>}
     {info && !hidden && <>
-      <p>Collection: {info.collectionID} · Permission expires {info.expiresAt}</p>
-      <nav aria-label="Native collection"><button disabled={busy} onClick={() => load('saved')}>Open saved Proof</button><button disabled={busy} onClick={() => load('pending')}>Open pending review</button><button disabled={busy} onClick={() => { if (confirmDiscardDraft()) { clearEvidence(); setEditor(draftFor(null)); } }}>Add native Proof</button></nav>
-      <form onSubmit={e => { e.preventDefault(); load('saved'); }}>
+      <details className="native-connection-details"><summary>Connection details</summary><p>Collection: {info.collectionID}<br />Permission expires {info.expiresAt}</p></details>
+      <nav className="native-collection-nav" aria-label="Native collection"><button disabled={busy} onClick={() => load('saved')}>Open saved Proof</button><button disabled={busy} onClick={() => load('pending')}>Open pending review</button><button disabled={busy} onClick={() => { if (confirmDiscardDraft()) { clearEvidence(); setEditor(draftFor(null)); } }}>Add native Proof</button></nav>
+      <form className="native-filter-bar" onSubmit={e => { e.preventDefault(); load('saved'); }}>
         <label>Search saved native Proof<input value={query} onChange={e => setQuery(e.target.value)} disabled={busy} /></label>
         <label>Category filter<select value={category} onChange={e => setCategory(e.target.value)} disabled={busy}><option value="">All categories</option>{PROOF_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
         <label>Tag filter<input value={tag} onChange={e => setTag(e.target.value)} disabled={busy} maxLength={100} /></label>
@@ -174,36 +174,39 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
       </form>
       {editor && draftSuspended && <p>A draft is available in this page’s memory. <button disabled={busy} onClick={() => { const currentEpoch = epoch.current; void run(async () => { if (epoch.current === currentEpoch) setDraftSuspended(false); }); }}>Resume draft</button></p>}
       {editor && !draftSuspended && <NativeEditor key={editor.record?.revision ?? 'new'} draft={editor} onChange={setEditor} busy={busy} onSave={save} onClose={() => { if (confirmDiscardDraft()) setEditor(null); }} />}
-      {result && <section aria-label={state === 'pending' ? 'Native pending review' : 'Native saved Proof'}>
+      {result && <section className="native-results" aria-label={state === 'pending' ? 'Native pending review' : 'Native saved Proof'}>
         <h2>{state === 'pending' ? 'Pending review — not saved Proof' : 'Saved Proof'}</h2>
-        <p>{result.matching === 'local-semantic' ? 'On-device meaning matching' : result.matching === 'local-literal-text' ? 'Literal text matching (local fallback)' : 'Newest added first'}{result.searchScope ? ` · ${result.searchScope}` : ''}{result.searchedCount !== undefined ? ` · ${result.searchedCount} records searched` : ''}</p>
-        <p>Applied category: {PROOF_CATEGORIES.find(c => c.value === applied.category)?.label ?? 'All categories'} · Applied tag: {applied.tag || 'All tags'}. Form changes apply only when you open or search a view.</p>
+        <p className="native-result-detail">{result.matching === 'local-semantic' ? 'On-device meaning matching' : result.matching === 'local-literal-text' ? 'Literal text matching (local fallback)' : 'Newest added first'}{result.searchScope ? ` · ${result.searchScope}` : ''}{result.searchedCount !== undefined ? ` · ${result.searchedCount} records searched` : ''}</p>
+        <p className="native-result-detail">Applied category: {PROOF_CATEGORIES.find(c => c.value === applied.category)?.label ?? 'All categories'} · Applied tag: {applied.tag || 'All tags'}. Form changes apply only when you open or search a view.</p>
         {applied.query && state === 'saved' && <>
           <p>Search considers up to the newest 100 saved records matching these filters and does not have additional result pages.{result.hasMore ? ' More filtered records exist outside this search window.' : ''}</p>
           <button disabled={busy} onClick={() => { setQuery(''); setCategory(applied.category); setTag(applied.tag); load('saved', 0, { ...applied, query: '' }); }}>Browse all filtered saved Proof</button>
         </>}
         {!result.items.length && <p>No items match this view.</p>}
-        {result.items.map(record => <article className="proof-card" key={record.id}>
+        <div className="native-card-grid">{result.items.map(record => <article className="proof-card native-card" key={record.id}>
+          <div className="native-media">
+          {urls[record.id] && (record.media?.mimeType.startsWith('video/') ? <video src={urls[record.id]} controls playsInline preload="metadata" aria-label={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} /> : <img src={urls[record.id]} alt={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} referrerPolicy="no-referrer" />)}
+          </div>
           <h3>{record.fields.title || (state === 'pending' ? 'Untitled candidate' : 'Untitled saved item')}</h3>
           <blockquote>{record.fields.evidenceText}</blockquote>
-          <dl><dt>Occurred</dt><dd>{record.fields.occurredOn ?? 'Unknown'}</dd><dt>Source</dt><dd>{record.fields.source ?? 'Unknown'}</dd><dt>Source type</dt><dd>{record.fields.sourceType}</dd><dt>Person</dt><dd>{record.fields.person ?? 'Unknown'}</dd><dt>Project</dt><dd>{record.fields.project ?? 'Unknown'}</dd><dt>Category</dt><dd>{record.fields.category ?? 'Not chosen'}</dd><dt>Tags</dt><dd>{record.fields.tags.join(', ') || 'None'}</dd></dl>
-          {record.receipt && <p>{record.receipt.representation === 'jpeg-preview' ? 'JPEG preview; original remains in Photos.' : 'Original media bytes.'} Source: {record.receipt.scope}. Original filename: {record.receipt.originalFilename}. Capture date: {record.receipt.captureDate ?? 'Unknown'}.</p>}
-          {record.approval && <p>{record.approval.method === 'trusted-source' ? 'Saved under exact-source approval' : 'Saved by owner review'} · {record.approval.approvedAt}</p>}
+          <dl className="native-receipt"><div><dt>Occurred</dt><dd>{record.fields.occurredOn ?? 'Unknown'}</dd></div><div><dt>Source</dt><dd>{record.fields.source ?? 'Unknown'}</dd></div></dl>
+          <p className="native-category">{PROOF_CATEGORIES.find(c => c.value === record.fields.category)?.label ?? 'Category not chosen'}{record.fields.tags.length ? ` · ${record.fields.tags.join(', ')}` : ''}</p>
+          {record.receipt && <p className="native-source-detail">{record.receipt.representation === 'jpeg-preview' ? 'JPEG preview; original remains in Photos.' : 'Original media bytes.'} Source: {record.receipt.scope}. Original filename: {record.receipt.originalFilename}. Capture date: {record.receipt.captureDate ?? 'Unknown'}.</p>}
+          {record.approval && <p className="native-source-detail">{record.approval.method === 'trusted-source' ? 'Saved under exact-source approval' : 'Saved by owner review'} · {record.approval.approvedAt}</p>}
           {record.media && !urls[record.id] && <button disabled={busy} onClick={() => preview(record)}>Open attachment</button>}
-          {urls[record.id] && (record.media?.mimeType.startsWith('video/') ? <video src={urls[record.id]} controls playsInline preload="metadata" aria-label={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} /> : <img src={urls[record.id]} alt={record.state === 'pending' ? 'Pending candidate attachment' : 'Saved evidence attachment'} referrerPolicy="no-referrer" />)}
-          <details><summary>Original source receipt and provenance</summary><pre>{JSON.stringify({ receipt: record.receipt, provenance: record.provenance, media: record.media, restoreReceipt: record.restoreReceipt }, null, 2)}</pre></details>
-          <button disabled={busy} onClick={() => { if (confirmDiscardDraft()) setEditor(draftFor(record)); }}>{record.state === 'pending' ? 'Review candidate' : 'Edit Proof'}</button>
-          <button disabled={busy} onClick={() => {
+          <details className="native-provenance"><summary>Original source receipt and provenance</summary><p>Source type: {record.fields.sourceType}{record.fields.person ? ` · Person: ${record.fields.person}` : ''}{record.fields.project ? ` · Project: ${record.fields.project}` : ''}</p><pre>{JSON.stringify({ receipt: record.receipt, provenance: record.provenance, media: record.media, restoreReceipt: record.restoreReceipt }, null, 2)}</pre></details>
+          <div className="native-card-actions"><button disabled={busy} onClick={() => { if (confirmDiscardDraft()) setEditor(draftFor(record)); }}>{record.state === 'pending' ? 'Review candidate' : 'Edit Proof'}</button>
+          <button className="native-danger" disabled={busy} onClick={() => {
             if (!window.confirm(record.state === 'pending' ? 'Remove this pending candidate from the native vault?' : 'Delete this saved item from the native vault? Original source files remain.')) return;
             if (!confirmDiscardDraft()) return;
             const currentEpoch = epoch.current;
             void run(async c => { await c.delete(record); if (epoch.current === currentEpoch) { clearEvidence(); setMessage('Removed from the native vault.'); } });
-          }}>{record.state === 'pending' ? 'Remove candidate' : 'Delete Proof'}</button>
-        </article>)}
-        {result.matching === 'newest' && !applied.query && <>
+          }}>{record.state === 'pending' ? 'Remove candidate' : 'Delete Proof'}</button></div>
+        </article>)}</div>
+        {result.matching === 'newest' && !applied.query && <div className="native-pagination">
           <button disabled={busy || offset === 0} onClick={() => load(state, Math.max(0, offset - 30), applied)}>Previous page</button>
           <button disabled={busy || !result.hasMore || offset >= 9970} onClick={() => load(state, offset + 30, applied)}>Next page</button>
-        </>}
+        </div>}
       </section>}
     </>}
   </main>;

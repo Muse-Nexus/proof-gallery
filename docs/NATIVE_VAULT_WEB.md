@@ -84,3 +84,11 @@ allowed origin and actual Mac browser permission checks. A loopback code on a
 phone or another computer cannot reach the Mac. This implementation is not a
 Windows/Android native collector or a cross-device sync release. No real evidence,
 OS permission, installation or production release is needed for the fixtures.
+
+## Presentation
+
+The native view uses the main gallery's paper/green palette and light typography.
+Responsive controls and readable cards keep full literal quotes, occurred dates
+and sources visible. Opened attachments lead their cards; they are never fetched
+for decoration or automatically. Connection identifiers and optional metadata use
+secondary details, while storage and permission disclosures remain visible.
