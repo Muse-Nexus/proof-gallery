@@ -28,8 +28,12 @@ configuration, unique session/namespace, and loopback network allowlist.
 Only an explicit runtime environment allowlist is inherited; provider credentials,
 `AGENT_BROWSER_*`, proxy, and AI Gateway overrides are not passed through.
 The runner closes only its own browser and development server in `finally`.
-The separate `browser-e2e` CI job installs the pinned runtime and runs this same
-command against an isolated loopback development server.
+The separate `browser-e2e` CI job installs the pinned runtime on `macos-15` and
+runs this same command against an isolated loopback development server. This
+keeps Chrome's sandbox enabled; the downloaded test browser cannot start under
+the default Ubuntu 24 AppArmor user-namespace policy. The required `verify` job
+depends on successful browser and native checks, so a failed or skipped E2E job
+cannot pass the release gate. No `--no-sandbox` or system-policy changes are used.
 
 All evidence is synthetic. Application writes use the rendered UI and actual
 browser storage, not mocked IndexedDB or imported application-store functions.

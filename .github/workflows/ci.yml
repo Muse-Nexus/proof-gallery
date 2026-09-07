@@ -14,7 +14,9 @@ concurrency:
 
 jobs:
   browser-e2e:
-    runs-on: ubuntu-latest
+    # Keep Chromium sandboxing intact; Ubuntu 24's AppArmor policy prevents
+    # the downloaded test browser from creating its user-namespace sandbox.
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - name: Check out reviewed source
@@ -26,7 +28,7 @@ jobs:
       - name: Install locked application dependencies
         run: bun install --frozen-lockfile
       - name: Install pinned synthetic browser runtime
-        run: bunx agent-browser@0.36.0 install --with-deps
+        run: bunx agent-browser@0.36.0 install
       - name: Verify real local browser workflows with synthetic evidence
         run: bun run test:e2e
 
@@ -55,15 +57,18 @@ jobs:
           codesign --verify --deep --strict --verbose=2 '.build/Proof Photos Companion.app'
 
   verify:
-    needs: mac-companion
+    needs: [mac-companion, browser-e2e]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Require native companion checks
+      - name: Require native companion and browser checks
         env:
           MAC_COMPANION_RESULT: ${{ needs.mac-companion.result }}
-        run: test "$MAC_COMPANION_RESULT" = success
+          BROWSER_E2E_RESULT: ${{ needs.browser-e2e.result }}
+        run: |
+          test "$MAC_COMPANION_RESULT" = success
+          test "$BROWSER_E2E_RESULT" = success
       - name: Check out reviewed source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
 
