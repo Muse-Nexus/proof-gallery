@@ -164,4 +164,45 @@ final class NativeLifecycleTests: XCTestCase {
         XCTAssertFalse(controller.keepsServicesRunningAfterWindowClose)
         XCTAssertTrue(controller.clients.isEmpty)
     }
+
+    @MainActor func testHiddenWindowPausesForegroundStateAndKeepsPreparedEvidence() throws {
+        let vault = try authority(), model = PhotosModel(), photo = try preparedPhoto()
+        let created = try vault.createSourceGrant(VaultSourceConfiguration(provider: .folder,
+            sourceID: "synthetic-foreground-source", label: "Synthetic foreground source"))
+        let prior = try vault.pauseSource(id: created.id, revision: created.revision)
+        XCTAssertTrue(model.attachVault(vault))
+        model.photos = [photo]; model.active = true; model.scanning = true
+        XCTAssertFalse(model.backgroundEnabled)
+        // Actual PhotosModel seam used by hide/minimize/close delegates, without an NSWindow.
+        model.suspendForHiddenWindow()
+        XCTAssertFalse(model.active); XCTAssertFalse(model.scanning); XCTAssertFalse(model.allowICloudDownloads)
+        XCTAssertEqual(model.photos, [photo]); XCTAssertFalse(model.backgroundEnabled)
+        let paused = try XCTUnwrap(vault.sourceGrants().first)
+        XCTAssertTrue(paused.paused); XCTAssertNotEqual(paused.revision, prior.revision)
+        XCTAssertEqual(paused.configuration, prior.configuration)
+        XCTAssertEqual(paused.approvedAt, prior.approvedAt)
+        model.stopForTermination()
+    }
+
+    @MainActor func testHiddenWindowKeepsApprovedBackgroundButPausesDownloadBatch() throws {
+        let vault = try authority(), model = PhotosModel(), photo = try preparedPhoto()
+        let created = try vault.createSourceGrant(VaultSourceConfiguration(provider: .folder,
+            sourceID: "synthetic-background-source", label: "Synthetic background source", backgroundEnabled: true))
+        let prior = try vault.pauseSource(id: created.id, revision: created.revision)
+        XCTAssertTrue(model.attachVault(vault))
+        model.photos = [photo]; model.active = true; model.scanning = true
+        XCTAssertTrue(model.backgroundEnabled)
+        model.suspendForHiddenWindow()
+        XCTAssertTrue(model.active); XCTAssertTrue(model.scanning)
+        XCTAssertEqual(try vault.sourceGrants(), [prior]); XCTAssertEqual(model.photos, [photo])
+        // Synthetic one-shot flag only: never calls PhotoKit or requests an iCloud resource.
+        model.allowICloudDownloads = true
+        model.suspendForHiddenWindow()
+        XCTAssertFalse(model.active); XCTAssertFalse(model.scanning); XCTAssertFalse(model.allowICloudDownloads)
+        XCTAssertTrue(model.backgroundEnabled); XCTAssertEqual(model.photos, [photo])
+        let paused = try XCTUnwrap(vault.sourceGrants().first)
+        XCTAssertTrue(paused.paused); XCTAssertNotEqual(paused.revision, prior.revision)
+        XCTAssertEqual(paused.configuration, prior.configuration)
+        model.stopForTermination()
+    }
 }
