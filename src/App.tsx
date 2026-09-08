@@ -731,7 +731,7 @@ function Gallery({
             <h3 id="mac-source-title">Apple Photos</h3>
             <p>Use the companion to select a Photos album or date range. Transfer a prepared batch into your review.</p>
             <button className="secondary-button" type="button" disabled={editingBlocked} onClick={() => setShowCompanion(value => !value)}>{showCompanion ? "Close Mac connection" : "Connect this Mac"}</button>
-            <small>{companion ? "A temporary companion connection is active." : "Companion prerelease: a public notarized installer is not available yet. Choose media above to begin without it."}</small>
+            <small>{companion ? "A temporary companion connection is active." : <>Experimental Mac preview · Apple silicon · macOS 14+. <a href="https://github.com/Muse-Nexus/proof-gallery/releases/tag/native-v0.2.0-preview.1" target="_blank" rel="noopener noreferrer">Release notes &amp; download</a>. Real Photos and background checks are unfinished. Installing does not start collection.</>}</small>
           </section>
         </div>
         {showCompanion && <CompanionPanel session={companion} onSession={setCompanion} onBusyChange={setBusy} disabled={busy || mediaDirty} onImported={() => { setView("gallery"); setShowMediaInbox(false); window.setTimeout(() => setShowMediaInbox(true), 0); void reload(); }} />}

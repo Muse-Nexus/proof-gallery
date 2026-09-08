@@ -1,10 +1,12 @@
 # Install Proof for easy access
 
-This section describes the browser app. The unreleased Mac companion adds a
-separate durable native collection and explicitly approved background behavior;
-see [native setup](NATIVE_SETUP.md). Its source build is not yet a public
-notarized installer. There is no Windows/Android native background collector in
-this version; browser access and media picking do not establish that capability.
+This section describes the browser app. A separate owner-approved
+[experimental Mac native prerelease](https://github.com/Muse-Nexus/proof-gallery/releases/download/native-v0.2.0-preview.1/Proof-Photos-Companion-0.2.0.dmg)
+is available for Apple-silicon Macs running macOS 14 or later; it is not GA or a
+general install recommendation, and its clean-account/device and real-source
+gates remain unfinished. See [native setup](NATIVE_SETUP.md) and
+[release status](RELEASE_STATUS.md). There is no Windows/Android native
+background collector; browser access and media picking are not native parity.
 
 Installation adds an app icon. It does not grant access to Photos, messages,
 folders, or accounts, and it does not add background collection. You still use

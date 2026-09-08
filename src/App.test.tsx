@@ -435,6 +435,25 @@ describe("standalone local storage boundary", () => {
     await waitFor(() => expect(searchLocalProofItems).toHaveBeenCalledOnce());
   });
 
+  it("links the experimental Mac release without starting a connection or fetching evidence", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    window.localStorage.setItem("proof-gallery-storage-mode", "local");
+    render(<App />);
+    await screen.findByRole("heading", { name: "Your local gallery is empty" });
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+
+    const release = screen.getByRole("link", { name: "Release notes & download" });
+    expect(release).toHaveAttribute("href", "https://github.com/Muse-Nexus/proof-gallery/releases/tag/native-v0.2.0-preview.1");
+    expect(release).toHaveAttribute("target", "_blank");
+    expect(release).toHaveAttribute("rel", "noopener noreferrer");
+    expect(screen.getByText(/Experimental Mac preview · Apple silicon · macOS 14\+/)).toBeVisible();
+    expect(screen.getByText(/Real Photos and background checks are unfinished\. Installing does not start collection\./)).toBeVisible();
+    expect(screen.queryByText(/public notarized installer is not available yet/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect this Mac" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Close Mac connection" })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("keeps a chosen folder mounted across views and suspends it while editing", async () => {
     window.localStorage.setItem("proof-gallery-storage-mode", "local");
     const { container } = render(<App />);

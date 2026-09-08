@@ -64,11 +64,13 @@ connections still end on reload. Nothing collects while closed.
 See [automatic sources](AUTOMATIC_SOURCES.md).
 
 For Apple Photos directly, the optional [Mac companion](COMPANION.md) offers
-Recent Photos or an album/date range. Favorites are not required. Its public
-source is a preview, and a notarized local candidate exists, but there is no
-public Mac binary or completed clean-account acceptance yet. Start with browser
-selection unless you are building the native companion yourself. See the
-[current platform and release status](RELEASE_STATUS.md).
+Recent Photos or an album/date range. Favorites are not required. An
+[experimental notarized installer](https://github.com/Muse-Nexus/proof-gallery/releases/download/native-v0.2.0-preview.1/Proof-Photos-Companion-0.2.0.dmg)
+is public for Apple-silicon Macs running macOS 14 or later. It was published by
+explicit owner-approved exception while clean-account/device, real Photos,
+background, OS-permission, and chosen-assistant checks remain unfinished. Start
+with browser selection unless you intentionally choose to test that preview. See
+the [current platform and release status](RELEASE_STATUS.md).
 
 ## Find something you saved
 
@@ -107,7 +109,7 @@ browser. You do not need to create an account for them, handle their files, or
 send them your passphrase. They can also [run their own copy](SELF_HOSTING.md)
 without a subscription.
 
-The public website currently serves the reviewed `6bdd308` release. A future
+The public website currently serves the reviewed `ad2b8ad` release. A future
 feature is available only after another release or when you run that checkout
-locally. Native Mac distribution is a separate release step; check
-[release status](RELEASE_STATUS.md) before describing it as downloadable.
+locally. The Mac download is an experimental prerelease with separate unfinished
+device gates; check [release status](RELEASE_STATUS.md) before sharing it.
