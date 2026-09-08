@@ -1,3 +1,4 @@
+import { ProofMark } from "./ProofMark";
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PROOF_CATEGORIES, PROOF_SOURCE_TYPES } from '../lib/proof';
 import { LOCAL_MEDIA_ACCEPT } from '../lib/media';
@@ -152,7 +153,8 @@ export function NativeVaultGallery({ onExit }: { onExit: () => void }) {
     });
   }
   return <main className="app-shell native-vault">
-    <header className="native-header"><span className="privacy-badge">Same Mac · private connection</span><h1>Native vault on this Mac</h1><p>A separate collection kept by the companion. This connection does not import or merge your browser collection.</p>
+    <header className="native-header">
+      <span className="gallery-eyebrow"><ProofMark />Proof Gallery · on this Mac</span><span className="privacy-badge">Same Mac · private connection</span><h1>Native vault on this Mac</h1><p>A separate collection kept by the companion. This connection does not import or merge your browser collection.</p>
       <div className="native-actions"><button onClick={() => { if (confirmDiscardDraft()) { disconnect(); onExit(); } }}>Return to browser gallery</button>
       {info && <button onClick={() => disconnect()}>Disconnect native vault</button>}</div>
     </header>
