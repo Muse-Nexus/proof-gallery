@@ -12,7 +12,7 @@ and where it came from. Find it again when your own history feels hard to reach.
 
 [Open Proof Gallery](https://proof-gallery-9jn.pages.dev/) ·
 [Get started](docs/GETTING_STARTED.md) · [Run your own](docs/SELF_HOSTING.md) ·
-[Privacy](docs/PRIVACY.md)
+[Privacy](docs/PRIVACY.md) · [Release status](docs/RELEASE_STATUS.md)
 
 ![Proof Gallery. Decorative paper art, not saved evidence.](public/og-purpose.png)
 
@@ -51,18 +51,21 @@ The optional [Mac Photos companion](docs/COMPANION.md) reads Recent Photos,
 Favorites, or an album/date range you choose. It prepares media locally, then
 transfers a batch through a review file or a temporary same-Mac connection.
 On-device OCR and metadata are review aids, not verified quotes or inferred
-identities. The native installer is a prerelease; public notarized distribution
-is still pending. Browser media selection works without it on Mac, PC, or phone.
+identities. A Developer ID-signed, notarized, stapled Mac candidate has passed
+Gatekeeper locally, but no Mac binary is publicly available: clean-account GUI,
+source, OS-permission, and assistant checks remain. Browser media selection works
+now without it on Mac, PC, or phone.
 
-### Full-version native work (not yet released)
+### Mac native preview (source available; no public binary)
 
-This branch adds a durable private Mac collection, explicit background source
-consent, a same-store gallery connection, read-only MCP access and separately
-opted-in generic reminders. Source and assistant permissions do not restore from
-backups or appear just because you install the app. See [native setup](docs/NATIVE_SETUP.md)
-and [completion gates](docs/FULL_VERSION_PLAN.md). The released website and a
-local source build are not a notarized installer or verified Windows/Android
-background service; those platform and distribution gates remain separate.
+The public source adds a durable private Mac collection, explicit background
+source consent, a same-store gallery connection, read-only MCP access, and
+separately opted-in generic reminders. Source and assistant permissions do not
+restore from backups or appear just because you install the app. See
+[native setup](docs/NATIVE_SETUP.md), [current release status](docs/RELEASE_STATUS.md),
+and [completion gates](docs/FULL_VERSION_PLAN.md). The locally accepted Mac
+candidate is not a public download or clean-account acceptance receipt. There is
+no Windows or Android native background service.
 
 ## Your evidence stays yours
 
@@ -72,8 +75,8 @@ repository, its issues, screenshots, examples, or release bundles.
 - **Browser-local mode:** items and original media stay in this profile. Active
   storage is not encrypted by Proof Gallery, authenticated, or synced. Other
   users of the profile may access it. Clearing site data can erase it.
-- **Native collection (unreleased):** a separate private Mac database, accessed
-  only through explicitly granted gallery/assistant connections. Active storage
+- **Native collection (source preview; no public binary):** a separate private
+  Mac database, accessed only through explicitly granted gallery/assistant connections. Active storage
   is not app-encrypted; OS permissions do not block software running as you.
   A cloud assistant can disclose the saved text you request to its provider.
 - **Encrypted backups:** include saved Proof, pending media, and saved review

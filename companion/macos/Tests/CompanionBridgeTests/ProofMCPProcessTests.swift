@@ -2,20 +2,60 @@ import XCTest
 import CompanionCore
 import CompanionVault
 
+// Test-only selection. Never configure, launch or open the companion app itself.
+private func helperExecutable(root: URL, environment: [String: String]) throws -> URL {
+    if let installedApp = environment["PROOF_TEST_INSTALLED_APP"] {
+        guard environment["PROOF_TEST_PACKAGED_HELPER"] != "1",
+              installedApp.hasPrefix("/"), installedApp.hasSuffix(".app"),
+              !installedApp.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              !installedApp.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
+        return URL(fileURLWithPath: installedApp, isDirectory: true).appendingPathComponent("Contents/Helpers/ProofMCP")
+    }
+    return root.appendingPathComponent(environment["PROOF_TEST_PACKAGED_HELPER"] == "1"
+        ? ".build/Proof Photos Companion.app/Contents/Helpers/ProofMCP" : ".build/debug/ProofMCP")
+}
+
+final class ProofMCPExecutableSelectionTests: XCTestCase {
+    private let root = URL(fileURLWithPath: "/SYNTHETIC-BUILD", isDirectory: true)
+
+    func testDefaultAndPackagedSelectionsRemainSeparate() throws {
+        XCTAssertEqual(try helperExecutable(root: root, environment: [:]).path,
+                       "/SYNTHETIC-BUILD/.build/debug/ProofMCP")
+        XCTAssertEqual(try helperExecutable(root: root, environment: ["PROOF_TEST_PACKAGED_HELPER": "1"]).path,
+                       "/SYNTHETIC-BUILD/.build/Proof Photos Companion.app/Contents/Helpers/ProofMCP")
+    }
+
+    func testInstalledSelectionTargetsOnlyItsHelper() throws {
+        XCTAssertEqual(try helperExecutable(root: root, environment: ["PROOF_TEST_INSTALLED_APP": "/SYNTHETIC/Proof Photos Companion.app"]).path,
+                       "/SYNTHETIC/Proof Photos Companion.app/Contents/Helpers/ProofMCP")
+    }
+
+    func testInvalidOrAmbiguousInstalledSelectionFailsInsteadOfFallingBack() {
+        for value in ["", "relative.app", "/SYNTHETIC/not-an-app", "/SYNTHETIC/../Proof.app", "/SYNTHETIC/./Proof.app", "/SYNTHETIC/Proof\n.app"] {
+            XCTAssertThrowsError(try helperExecutable(root: root, environment: ["PROOF_TEST_INSTALLED_APP": value]))
+        }
+        XCTAssertThrowsError(try helperExecutable(root: root, environment: [
+            "PROOF_TEST_INSTALLED_APP": "/SYNTHETIC/Proof.app", "PROOF_TEST_PACKAGED_HELPER": "1",
+        ]))
+    }
+}
+
 final class ProofMCPProcessTests: XCTestCase {
     private struct RunResult { let stdout: Data; let stderr: Data; let status: Int32 }
-    private var executable: URL {
+    private func executable() throws -> URL {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return root.appendingPathComponent(ProcessInfo.processInfo.environment["PROOF_TEST_PACKAGED_HELPER"] == "1"
-            ? ".build/Proof Photos Companion.app/Contents/Helpers/ProofMCP" : ".build/debug/ProofMCP")
+        return try helperExecutable(root: root, environment: ProcessInfo.processInfo.environment)
     }
     private func run(_ messages: [[String: Any]], port: UInt16, token: String) async throws -> RunResult {
         let bytes = try messages.reduce(into: Data()) { result, message in
             result.append(try JSONSerialization.data(withJSONObject: message)); result.append(10)
         }
-        let executable = executable
+        let executable = try executable()
         guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-            if ProcessInfo.processInfo.environment["PROOF_TEST_PACKAGED_HELPER"] == "1" { throw CocoaError(.fileNoSuchFile) }
+            if ProcessInfo.processInfo.environment["PROOF_TEST_PACKAGED_HELPER"] == "1" ||
+                ProcessInfo.processInfo.environment["PROOF_TEST_INSTALLED_APP"] != nil { throw CocoaError(.fileNoSuchFile) }
             throw XCTSkip("Build the real ProofMCP product before process tests")
         }
         return try await withCheckedThrowingContinuation { continuation in

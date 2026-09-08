@@ -15,11 +15,13 @@ chosen album/date range while open, with a separate owner-triggered Photos permi
 It exports private candidate files or explicitly transfers one prepared batch
 over a five-minute same-Mac pairing. Neither route approves Proof or syncs accounts.
 
-The full-version branch additionally implements an explicit native private vault,
+The native source additionally implements an explicit private vault,
 background Photos/folder intake, a separate gallery connection, read-only MCP and
-opt-in generic reminders. These are source/build capabilities, not a signed,
-installed or publicly deployed release. Read `docs/FULL_VERSION_PLAN.md`,
-`docs/NATIVE_SETUP.md` and `docs/LOCAL_MCP.md` before extending those lanes.
+opt-in generic reminders. Capabilities in source do not establish public
+availability. Read `docs/RELEASE_STATUS.md` for the current release receipts and
+remaining gates; verify them before repeating completed signing or deployment
+steps. Read `docs/FULL_VERSION_PLAN.md`, `docs/NATIVE_SETUP.md` and
+`docs/LOCAL_MCP.md` before extending those lanes.
 
 **Major native authority instruction:** the companion alone owns its SQLite
 vault. Source collection, trusted automatic saving, background execution, login
@@ -149,3 +151,12 @@ and the absence of unrequested/external evidence network calls. Pairing tests us
 synthetic data only. Public native release needs Developer ID, hardened runtime,
 notarization, and stapling; ad-hoc builds are local development, not public readiness.
 Production deployment needs explicit approval.
+
+For native handoff follow `docs/NATIVE_RELEASE_CHECKLIST.md`. Preserve the exact
+accepted installer; web/docs/test-only changes do not justify rebuilding or
+re-signing its bytes. An installed helper passing synthetic tests does not prove
+clean-account GUI setup, OS permissions, or a chosen assistant host. Never ask
+for passwords in chat, reset an existing profile/vault, or activate private
+sources to work around a deferred device test. Keep that gate unverified and
+continue only independent safe work. Public binary upload needs separate approval
+and read-back verification of the actual published bytes and release visibility.

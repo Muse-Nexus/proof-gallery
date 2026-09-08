@@ -1,4 +1,8 @@
-# Native setup (development, not installed or released)
+# Native setup
+
+See [current release status](RELEASE_STATUS.md) before choosing a source build or
+installer. Source capability, local artifact acceptance, and public availability
+are separate receipts; this guide describes setup behavior, not release status.
 
 The native setup creates one private `ProofGalleryVault` under the application's
 Application Support directory only after the owner presses **Set up private
@@ -52,7 +56,9 @@ a different inner format. Passwords stay in memory and are cleared from the fiel
 after starting an operation. No backup is uploaded automatically. Keep a recovery
 copy and its passphrase separately; losing both loses access to this evidence.
 
-Public signed helper packaging is a separate completion gate. Do not advertise
-this source build as ready to install.
-Actual native first-run, OS permissions, restart, notifications, Gatekeeper and
-Windows/Android behavior require separate device receipts and owner authorization.
+Follow the [native release checklist](NATIVE_RELEASE_CHECKLIST.md) for exact
+artifact checks and remaining device gates. Do not repeat completed signing or
+notarization work solely because a historical source receipt predates it.
+Native first-run, OS permissions, restart, notifications and a chosen assistant
+host require separate device receipts and owner authorization. Windows/Android
+native collection is not implemented; browser support is not native parity.

@@ -62,3 +62,33 @@ same process suite again against the ad-hoc packaged helper after bundle signing
 for the runner's native architecture (not an unexecutable cross-build).
 Missing packaged binaries fail rather than skip. Neither check uses release
 credentials or submits an artifact to Apple.
+
+## Check an already-installed helper without opening Photos
+
+After separately authorized installation, the same synthetic process suite can
+target the helper inside that exact app. Verify its signature and provenance
+first. From a clean source checkout on the Mac:
+
+```sh
+PROOF_TEST_INSTALLED_APP='/Applications/Proof Photos Companion.app' \
+  swift test --package-path companion/macos --filter 'ProofMCP(ExecutableSelection|Process)Tests'
+```
+
+This executes only `Contents/Helpers/ProofMCP` with a fresh temporary synthetic
+vault/loopback server and synthetic token. It does not launch the Photos app,
+read its UserDefaults or private collection, grant source/client permissions,
+configure an assistant, or contact a cloud provider. Only the test port/token
+and a fixed system PATH are passed into the child process. No real credential
+is needed. An invalid or missing installed selection fails; it never falls back
+to the debug helper. Do not combine it with `PROOF_TEST_PACKAGED_HELPER=1`.
+
+An installed-helper pass proves the selected executable's stdio and synthetic
+bridge behavior on that host/profile. It is not clean-profile app first launch,
+Photos/notification permission, restart/wake, or a real assistant-host receipt.
+Leave those gates explicitly unverified until observed; no password or security
+override can turn a process test into a GUI acceptance test.
+
+The Developer ID signed build 4 helper passed this installed-path suite on
+2026-09-08: three executable-selection checks and two real stdio process tests,
+all with synthetic evidence. This receipt does not change the remaining
+[native release gates](NATIVE_RELEASE_CHECKLIST.md).

@@ -34,19 +34,25 @@ printf '%s\n' \
   '  for companion_test_arg in "$@"; do companion_test_last="$companion_test_arg"; done' \
   '  case "$PROOF_TEST_LOG_MODE" in' \
   '    malformed) printf "%s\n" "not-json" > "$companion_test_last" ;;' \
-  '    warning) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"issues\":[{\"severity\":\"warning\"}]}" > "$companion_test_last" ;;' \
+  '    warning) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[{\"severity\":\"warning\"}]}" > "$companion_test_last" ;;' \
   '    incomplete) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\"}" > "$companion_test_last" ;;' \
-  '    invalid-severity) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"issues\":[{\"severity\":\"critical\"}]}" > "$companion_test_last" ;;' \
-  '    mismatch-id) printf "%s\n" "{\"jobId\":\"BBCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"issues\":[]}" > "$companion_test_last" ;;' \
-  '    mismatch-status) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Invalid\",\"issues\":[]}" > "$companion_test_last" ;;' \
-  '    clean) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"issues\":null}" > "$companion_test_last" ;;' \
+  '    invalid-severity) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[{\"severity\":\"critical\"}]}" > "$companion_test_last" ;;' \
+  '    mismatch-id) printf "%s\n" "{\"jobId\":\"BBCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[]}" > "$companion_test_last" ;;' \
+  '    mismatch-status) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Invalid\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[]}" > "$companion_test_last" ;;' \
+  '    bad-status-code) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":1,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[]}" > "$companion_test_last" ;;' \
+  '    mismatch-archive) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Other.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":[]}" > "$companion_test_last" ;;' \
+  '    mismatch-hash) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"issues\":[]}" > "$companion_test_last" ;;' \
+  '    clean) printf "%s\n" "{\"jobId\":\"ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB\",\"status\":\"Accepted\",\"statusCode\":0,\"archiveFilename\":\"Proof-Photos-Companion-0.2.0.dmg\",\"sha256\":\"$PROOF_APPROVED_DMG_SHA256\",\"issues\":null}" > "$companion_test_last" ;;' \
   '    *) exit 1 ;;' \
   '  esac' \
   '  exit 0' \
   'fi' \
   'if [[ "$1" == "stapler" ]]; then touch "$PROOF_TEST_STAPLE_MARKER"; exit 0; fi' \
   'exit 1' > "$companion_test_bin/xcrun"
-printf '%s\n' '#!/bin/bash' 'exit 0' > "$companion_test_bin/spctl"
+printf '%s\n' \
+  '#!/bin/bash' \
+  'printf "%s\n" "$*" >> "$PROOF_TEST_SPCTL_LOG"' \
+  'exit 0' > "$companion_test_bin/spctl"
 chmod +x "$companion_test_bin/git" "$companion_test_bin/codesign" "$companion_test_bin/xcrun" "$companion_test_bin/spctl"
 
 companion_test_dmg="$companion_test_release/Proof-Photos-Companion-0.2.0.dmg"
@@ -55,6 +61,7 @@ printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa > "$companion_test_releas
 (cd "$companion_test_release" && shasum -a 256 "$(basename "$companion_test_dmg")" > pre-notarization-sha256.txt)
 companion_test_hash="$(shasum -a 256 "$companion_test_dmg" | cut -d ' ' -f 1)"
 companion_test_xcrun_log="$companion_test_root/xcrun.log"
+companion_test_spctl_log="$companion_test_root/spctl.log"
 companion_test_staple_marker="$companion_test_root/stapled"
 companion_test_run_output="$companion_test_root/notary-run.out"
 
@@ -66,6 +73,7 @@ run_notarize() {
   PROOF_NOTARY_PROFILE=synthetic-profile \
   PROOF_APPROVED_DMG_SHA256="$1" \
   PROOF_TEST_XCRUN_LOG="$companion_test_xcrun_log" \
+  PROOF_TEST_SPCTL_LOG="$companion_test_spctl_log" \
   PROOF_TEST_STAPLE_MARKER="$companion_test_staple_marker" \
   PROOF_TEST_LOG_MODE="${2:-malformed}" \
   bash "$companion_test_macos/package-release.sh" >"$companion_test_run_output" 2>&1
@@ -77,6 +85,7 @@ reset_notary_attempt() {
     "$companion_test_release/notarization-log.json" \
     "$companion_test_release/release-sha256.txt" \
     "$companion_test_xcrun_log" \
+    "$companion_test_spctl_log" \
     "$companion_test_staple_marker"
 }
 
@@ -155,6 +164,27 @@ fi
 [[ ! -e "$companion_test_staple_marker" ]]
 
 reset_notary_attempt
+if run_notarize "$companion_test_hash" bad-status-code; then
+  printf '%s\n' 'A nonzero Apple status code unexpectedly passed.' >&2
+  exit 1
+fi
+[[ ! -e "$companion_test_staple_marker" ]]
+
+reset_notary_attempt
+if run_notarize "$companion_test_hash" mismatch-archive; then
+  printf '%s\n' 'A mismatched Apple archive filename unexpectedly passed.' >&2
+  exit 1
+fi
+[[ ! -e "$companion_test_staple_marker" ]]
+
+reset_notary_attempt
+if run_notarize "$companion_test_hash" mismatch-hash; then
+  printf '%s\n' 'A mismatched Apple archive SHA-256 unexpectedly passed.' >&2
+  exit 1
+fi
+[[ ! -e "$companion_test_staple_marker" ]]
+
+reset_notary_attempt
 if ! run_notarize "$companion_test_hash" clean; then
   cat "$companion_test_run_output" >&2
   printf '%s\n' 'A clean accepted Apple response unexpectedly failed.' >&2
@@ -162,5 +192,8 @@ if ! run_notarize "$companion_test_hash" clean; then
 fi
 [[ -e "$companion_test_staple_marker" ]]
 [[ -f "$companion_test_release/release-sha256.txt" ]]
+grep -Fqx "stapler staple $companion_test_dmg" "$companion_test_xcrun_log"
+grep -Fqx "stapler validate $companion_test_dmg" "$companion_test_xcrun_log"
+grep -Fqx -- "--assess --type open --context context:primary-signature --verbose=2 $companion_test_dmg" "$companion_test_spctl_log"
 bash "$(dirname "$0")/test-build-safety.sh"
 printf '%s\n' 'Release safety checks passed.'

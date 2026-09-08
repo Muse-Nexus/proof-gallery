@@ -14,6 +14,13 @@ each need separate consent; default candidates stay pending. No grant restoratio
 from backups, hidden provider access, model-approved evidence or private evidence
 in lessons/instructions. Generic reminder delivery is not permission to surface
 quotes or images. Source builds and passing tests are not public native release.
+Use docs/RELEASE_STATUS.md for current availability and
+docs/NATIVE_RELEASE_CHECKLIST.md for remaining release gates. Preserve accepted
+installer bytes instead of rebuilding for web/docs/test-only changes. Synthetic
+installed-helper tests do not replace clean-account GUI or real assistant-host
+tests. Never request passwords in chat, reset existing private data, or activate
+sources to bypass a deferred device check. Publish binaries only after separate
+approval and read-back verification; do not repeat already receipted release work.
 The browser folder source needs a selected read-only handle and explicit Start.
 It checks bounded top-level files while the gallery is open and visible. Review
 is the default. The owner can explicitly confirm automatic saving for one exact
