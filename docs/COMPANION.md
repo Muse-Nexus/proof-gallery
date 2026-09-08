@@ -165,7 +165,9 @@ Real end-to-end Photos access must be checked after the owner grants permission
 and chooses a source. A successful build does not establish that device proof.
 
 Public distribution requires Developer ID signing, hardened runtime,
-notarization/stapling, and a reviewed release process. These account-dependent
+notarization/stapling, and a reviewed release process. The notarization gate
+must match Apple's accepted job ID, zero status code, archive filename, and
+SHA-256 to the exact owner-approved DMG before stapling. These account-dependent
 steps require fresh approval. Do not ship the local ad-hoc bundle as a notarized
 release, or claim native Android/Windows versions exist.
 

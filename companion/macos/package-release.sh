@@ -134,6 +134,9 @@ function run(argv) {
   if (!log || Array.isArray(log) || typeof log !== "object") throw new Error("Invalid notarization log");
   if (typeof log.jobId !== "string" || !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(log.jobId)) throw new Error("Invalid notarization job ID");
   if (typeof log.status !== "string" || !log.status) throw new Error("Invalid notarization status");
+  if (!Number.isInteger(log.statusCode) || log.statusCode !== 0) throw new Error("Invalid notarization status code");
+  if (typeof log.archiveFilename !== "string" || log.archiveFilename !== argv[1]) throw new Error("Notarization archive filename mismatch");
+  if (typeof log.sha256 !== "string" || log.sha256 !== argv[2]) throw new Error("Notarization archive SHA-256 mismatch");
   if (!Object.prototype.hasOwnProperty.call(log, "issues")) throw new Error("Missing notarization issues field");
   if (log.issues !== null && !Array.isArray(log.issues)) throw new Error("Invalid notarization issues field");
   const issues = log.issues || [];
@@ -144,7 +147,7 @@ function run(argv) {
   }
   const blocked = issues.length > 0;
   return [log.jobId, log.status, blocked ? "blocked" : "clean"].join("\t");
-}' "$companion_notary_log" 2>/dev/null)"; then
+}' "$companion_notary_log" "$companion_dmg_name" "$PROOF_APPROVED_DMG_SHA256" 2>/dev/null)"; then
   printf 'Apple returned an incomplete notarization log. Review %s; nothing was stapled.\n' "$companion_notary_log" >&2
   exit 1
 fi

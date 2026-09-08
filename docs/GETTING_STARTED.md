@@ -8,7 +8,8 @@ There is no target to hit, streak to maintain, or correct feeling to have.
 
 Open the [gallery](https://proof-gallery-9jn.pages.dev/) and choose **Start in
 this browser**. Use the same profile each time. Local evidence belongs to that
-profile, not an account, and active storage is not encrypted.
+profile, not an account, and active storage is not encrypted. Nothing else is
+required: no companion, cloud model, subscription, or API key.
 
 Choose **Add Proof** and start with a short note or exact message. Keep the
 words as written. Optional word-based suggestions can supply a title, category,
@@ -63,9 +64,11 @@ connections still end on reload. Nothing collects while closed.
 See [automatic sources](AUTOMATIC_SOURCES.md).
 
 For Apple Photos directly, the optional [Mac companion](COMPANION.md) offers
-Recent Photos or an album/date range. Favorites are not required. Public
-installer notarization is pending; start with browser selection unless you
-are building the native companion yourself.
+Recent Photos or an album/date range. Favorites are not required. Its public
+source is a preview, and a notarized local candidate exists, but there is no
+public Mac binary or completed clean-account acceptance yet. Start with browser
+selection unless you are building the native companion yourself. See the
+[current platform and release status](RELEASE_STATUS.md).
 
 ## Find something you saved
 
@@ -86,7 +89,9 @@ a new fact or tell you how to feel.
 Choose **Back up**, enter a strong passphrase, and download the encrypted
 `.proof` file. Saved Proof, pending media, and saved notes are included. Keep
 the file privately and the passphrase separately. You can store it manually in
-a local, Drive, or Dropbox folder.
+a local, Drive, or Dropbox folder. Never paste the backup passphrase, a native
+assistant token, or private evidence into a chat, issue, repository, or support
+message.
 
 Test **Restore** in a separate browser profile before depending on a backup.
 Wrong passphrases or conflicts leave the collection unchanged. An old archive
@@ -96,9 +101,13 @@ can restore an item you deleted after making that backup.
 
 Share the [website](https://proof-gallery-9jn.pages.dev/) or
 [repository](https://github.com/Muse-Nexus/proof-gallery), not your backup.
-Their gallery starts separately in their browser. They can also
-[run their own copy](SELF_HOSTING.md) without a subscription.
+Say: “Open the site, choose **Start in this browser**, add one note or selected
+photo, then make an encrypted backup.” Their gallery starts separately in their
+browser. You do not need to create an account for them, handle their files, or
+send them your passphrase. They can also [run their own copy](SELF_HOSTING.md)
+without a subscription.
 
-The website may lag the development branch. A new feature is available when
-that branch is released or when you run that checkout locally. Native Mac
-distribution is a separate release step.
+The public website currently serves the reviewed `6bdd308` release. A future
+feature is available only after another release or when you run that checkout
+locally. Native Mac distribution is a separate release step; check
+[release status](RELEASE_STATUS.md) before describing it as downloadable.
