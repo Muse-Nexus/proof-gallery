@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { NativeVaultGallery } from "./components/NativeVaultGallery";
+import { ProofMark } from "./components/ProofMark";
 import { AuthPanel } from "./components/AuthPanel";
 import { DecorativeVisual } from "./components/DecorativeVisual";
 import { ProofCard } from "./components/ProofCard";
@@ -80,7 +81,7 @@ function LocalStart({
     <main className="landing-shell">
       <nav className="landing-nav" aria-label="Primary navigation">
         <a className="landing-brand" href="#top" aria-label="Proof Gallery home">
-          <span className="brand-mark" aria-hidden="true">P</span>
+          <ProofMark />
           <span>Proof Gallery</span>
         </a>
         <div className="landing-nav-actions">
@@ -601,7 +602,7 @@ function Gallery({
     <main className="app-shell">
       <header className="app-header">
         <div className="app-identity">
-          <span className="gallery-eyebrow"><span className="brand-mark" aria-hidden="true">P</span>A place for your real life</span>
+          <span className="gallery-eyebrow"><ProofMark />A place for your real life</span>
           <h1>Proof Gallery</h1>
           <p className="gallery-purpose">The care, connection, and things you made happen. Here when you want to remember.</p>
         </div>
