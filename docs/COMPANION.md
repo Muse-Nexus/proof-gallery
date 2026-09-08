@@ -1,7 +1,10 @@
 # Mac Photos companion
 
-The web Sources card labels this companion as prerelease until a public
-notarized installer is available. Browser media selection needs no companion.
+This companion is an experimental prerelease. An [owner-approved notarized
+installer](https://github.com/Muse-Nexus/proof-gallery/releases/download/native-v0.2.0-preview.1/Proof-Photos-Companion-0.2.0.dmg)
+is public for Apple-silicon Macs running macOS 14 or later, but clean-account or
+clean-device and real-source acceptance remain unfinished. Browser media
+selection needs no companion.
 
 The companion makes source discovery less manual without treating every photo
 as Proof. It is a source adapter, not a judge of identity, relationships, worth,
@@ -156,20 +159,24 @@ Pairing currently accepts only the official gallery origin,
 `https://proof-gallery-9jn.pages.dev`. A localhost checkout or self-hosted
 custom domain must use **Export for review** and **Import companion review**.
 Do not widen the origin allowlist or disable browser security for a quick test.
-No public notarized installer is available yet; a signed local artifact alone
-does not establish public distribution.
+The exact v0.2.0 build 4 installer is publicly available as an experimental
+prerelease. That owner-approved exception does not establish clean-account/device
+GUI, real Photos, background lifecycle, notification, browser-connection, or
+chosen-assistant-host acceptance.
 
 Run the web `bun run check`, focused companion import tests, and native
 `swift test`/`bash build-app.sh`. Tests use synthetic media, not real libraries.
 Real end-to-end Photos access must be checked after the owner grants permission
 and chooses a source. A successful build does not establish that device proof.
 
-Public distribution requires Developer ID signing, hardened runtime,
-notarization/stapling, and a reviewed release process. The notarization gate
-must match Apple's accepted job ID, zero status code, archive filename, and
-SHA-256 to the exact owner-approved DMG before stapling. These account-dependent
-steps require fresh approval. Do not ship the local ad-hoc bundle as a notarized
-release, or claim native Android/Windows versions exist.
+The published build 4 DMG is Developer ID signed and notarized, and its installer
+is stapled. Its anonymous download matched the reviewed 1,299,679-byte asset and
+SHA-256 `2ae432dd57f2e67f533f64e94ca8d8f3589e4b2380ff86d24cbdaf26dd96e6fa`.
+The downloaded app passed strict signature and Gatekeeper checks as a notarized
+Developer ID app. The contained app is not claimed to be independently stapled.
+Any changed or future build requires fresh signing, notarization, exact-byte
+review, publication approval, and download verification. Do not ship an ad-hoc
+bundle as a notarized release or claim native Android/Windows versions exist.
 
 Sources: [PhotoKit authorization](https://developer.apple.com/documentation/photos/phphotolibrary/requestauthorization(for:handler:)),
 [resource streaming](https://developer.apple.com/documentation/photos/phassetresourcemanager/requestdata(for:options:datareceivedhandler:completionhandler:)),

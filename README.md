@@ -51,21 +51,23 @@ The optional [Mac Photos companion](docs/COMPANION.md) reads Recent Photos,
 Favorites, or an album/date range you choose. It prepares media locally, then
 transfers a batch through a review file or a temporary same-Mac connection.
 On-device OCR and metadata are review aids, not verified quotes or inferred
-identities. A Developer ID-signed, notarized, stapled Mac candidate has passed
-Gatekeeper locally, but no Mac binary is publicly available: clean-account GUI,
-source, OS-permission, and assistant checks remain. Browser media selection works
-now without it on Mac, PC, or phone.
+identities. An owner-approved experimental Mac prerelease is now available for
+Apple-silicon Macs running macOS 14 or later. Its installer is Developer ID
+signed, notarized, and stapled, but clean-account/device GUI, real-source,
+background, OS-permission, and chosen-assistant checks remain unfinished. Browser
+media selection works now without it on Mac, PC, or phone.
 
-### Mac native preview (source available; no public binary)
+### Experimental Mac native preview
 
 The public source adds a durable private Mac collection, explicit background
 source consent, a same-store gallery connection, read-only MCP access, and
 separately opted-in generic reminders. Source and assistant permissions do not
 restore from backups or appear just because you install the app. See
 [native setup](docs/NATIVE_SETUP.md), [current release status](docs/RELEASE_STATUS.md),
-and [completion gates](docs/FULL_VERSION_PLAN.md). The locally accepted Mac
-candidate is not a public download or clean-account acceptance receipt. There is
-no Windows or Android native background service.
+and [completion gates](docs/FULL_VERSION_PLAN.md). The owner-approved
+[experimental download](https://github.com/Muse-Nexus/proof-gallery/releases/download/native-v0.2.0-preview.1/Proof-Photos-Companion-0.2.0.dmg)
+is not GA, a general install recommendation, or a clean-account/device acceptance
+receipt. There is no Windows or Android native background service.
 
 ## Your evidence stays yours
 
@@ -75,7 +77,7 @@ repository, its issues, screenshots, examples, or release bundles.
 - **Browser-local mode:** items and original media stay in this profile. Active
   storage is not encrypted by Proof Gallery, authenticated, or synced. Other
   users of the profile may access it. Clearing site data can erase it.
-- **Native collection (source preview; no public binary):** a separate private
+- **Native collection (experimental Mac preview):** a separate private
   Mac database, accessed only through explicitly granted gallery/assistant connections. Active storage
   is not app-encrypted; OS permissions do not block software running as you.
   A cloud assistant can disclose the saved text you request to its provider.
