@@ -36,6 +36,26 @@ copies are secrets controlled by the owner, not automatically erased or publishe
 The loopback port is remembered so an explicitly granted assistant connection can
 resume after native restart. Port conflicts fail closed without an alternate host.
 
+### Connection-service restart repair
+
+The build 4 preview can fail to restart its private connection after remembering
+a port, even when no other process is listening. Its listener supplies the port
+twice to Network.framework, which rejects the duplicate endpoint configuration.
+The source repair supplies the loopback address and port only through the required
+local endpoint. Regression tests cover remembered-port restart and an occupied
+port failing without fallback. This source fix does not update an installed app;
+a reviewed, signed native update and installed-app restart check are still needed.
+Do not clear the vault, change source permissions, reset the remembered port, or
+disable sandbox protections to work around this failure.
+
+A separate helper error, “Proof connection is not configured,” means the selected
+assistant's launch environment is missing or has invalid `PROOF_MCP_PORT` or
+`PROOF_MCP_TOKEN` values. Repairing the listener does not configure the assistant.
+The owner must enter the current values privately in that existing MCP server's
+settings; do not create a duplicate server. If a token was shared in chat, revoke
+that assistant grant and create its replacement in the companion's owner UI,
+then enter the replacement directly in the host. Never ask for a token in chat.
+
 Reminders have separate OS permission and persisted consent, owner-chosen local
 time/timezone/quiet hours, a 20-hour cooldown and no missed-time catch-up. The OS
 receives only a generic invitation, not an evidence ID, quote or image. Turning

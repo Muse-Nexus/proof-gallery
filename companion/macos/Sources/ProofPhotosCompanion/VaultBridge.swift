@@ -24,7 +24,10 @@ final class VaultBridge: @unchecked Sendable {
                 let parameters = NWParameters(tls: nil, tcp: NWProtocolTCP.Options())
                 let endpointPort = NWEndpoint.Port(rawValue: preferredPort) ?? .any
                 parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: endpointPort)
-                let listener = try NWListener(using: parameters, on: endpointPort)
+                // The required endpoint already pins both IPv4 loopback and the
+                // saved port. Supplying that nonzero port again via `on:` makes
+                // Network.framework reject every remembered-port restart.
+                let listener = try NWListener(using: parameters)
                 self.listener = listener
                 listener.newConnectionHandler = { [weak self] connection in self?.accept(connection, session: session) }
                 listener.stateUpdateHandler = { [weak self] state in

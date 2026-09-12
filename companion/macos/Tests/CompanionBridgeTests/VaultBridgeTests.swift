@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 import CompanionCore
 import CompanionVault
 @testable import ProofPhotosCompanion
@@ -20,14 +21,37 @@ final class SyntheticVaultBridge {
         vault = try ProofVault(directory: root.appendingPathComponent("vault"), collectionID: UUID().uuidString)
         bridge = VaultBridge(vault: vault)
     }
-    func start() async throws {
+    func start(preferredPort: UInt16 = 0) async throws {
         let ready = BridgeReadyOnce()
         let port: UInt16? = await withCheckedContinuation { continuation in
-            bridge.start { value in if ready.claim() { continuation.resume(returning: value) } }
+            bridge.start(preferredPort: preferredPort) { value in if ready.claim() { continuation.resume(returning: value) } }
         }
         self.port = try XCTUnwrap(port)
     }
     func close() { bridge.stop(); try? FileManager.default.removeItem(at: root) }
+    func stopAndWaitForPortRelease() async throws {
+        bridge.stop()
+        // NWListener.cancel is asynchronous. Model an exited process rather
+        // than racing its still-closing socket, without enabling port reuse.
+        for _ in 0..<100 {
+            let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+            guard descriptor >= 0 else { throw POSIXError(.EIO) }
+            var address = sockaddr_in()
+            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+            address.sin_family = sa_family_t(AF_INET)
+            address.sin_port = port.bigEndian
+            address.sin_addr.s_addr = inet_addr("127.0.0.1")
+            let result = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+            Darwin.close(descriptor)
+            if result == 0 { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        throw POSIXError(.EADDRINUSE)
+    }
     func grant(_ kind: VaultClientKind, scopes: [VaultClientScope]) throws -> VaultIssuedClient {
         try vault.issueClient(kind: kind, scopes: scopes, expiresAt: Date().addingTimeInterval(300))
     }
@@ -58,6 +82,30 @@ final class SyntheticVaultBridge {
 }
 
 final class VaultBridgeTests: XCTestCase {
+    func testRestartReusesRememberedLoopbackPortWithoutClientGrants() async throws {
+        let fixture = try SyntheticVaultBridge(); defer { fixture.close() }
+        try await fixture.start()
+        let rememberedPort = fixture.port
+        try await fixture.stopAndWaitForPortRelease()
+        try await fixture.start(preferredPort: rememberedPort)
+        XCTAssertEqual(fixture.port, rememberedPort)
+        XCTAssertTrue(try fixture.vault.clientGrants().isEmpty)
+    }
+
+    func testOccupiedRememberedPortFailsWithoutFallback() async throws {
+        let occupying = try SyntheticVaultBridge(); defer { occupying.close() }
+        try await occupying.start()
+        let contender = try SyntheticVaultBridge(); defer { contender.close() }
+        let ready = BridgeReadyOnce()
+        let result: UInt16? = await withCheckedContinuation { continuation in
+            contender.bridge.start(preferredPort: occupying.port) { value in
+                if ready.claim() { continuation.resume(returning: value) }
+            }
+        }
+        XCTAssertNil(result)
+        XCTAssertTrue(try contender.vault.clientGrants().isEmpty)
+    }
+
     func testSameStorePendingApprovalSavedGetSearchAndExactMedia() async throws {
         let fixture = try SyntheticVaultBridge(); defer { fixture.close() }; try await fixture.start()
         let gallery = try fixture.grant(.gallery, scopes: [.savedText, .savedMedia, .galleryReview])
